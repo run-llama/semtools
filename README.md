@@ -16,10 +16,22 @@ Prerequisites:
 - [Rust + Cargo](https://www.rust-lang.org/tools/install)
 - For the `parse` tool: LlamaIndex Cloud API key
 
+Install:
+
 ```bash
-# Install the complete SemTools package
+# install entire crate
 cargo install semtools
 
+# install only parse
+cargo install semtools --no-default-features --features=parse
+
+# install only search
+cargo install semtools --no-default-features --features=search
+```
+
+Basic Usage:
+
+```bash
 # Parse a PDF and search for specific content
 parse document.pdf | search "error handling"
 
@@ -33,7 +45,7 @@ search "machine learning" file1.txt file2.txt --context 5 --threshold 0.3
 echo "some text content" | search "content"
 ```
 
-## CLI Usage
+## CLI Help
 
 ```bash
 parse --help
