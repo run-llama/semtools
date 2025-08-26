@@ -150,11 +150,11 @@ fn main() -> Result<()> {
         let end = search_result.end;
 
         println!("{filename}:{start}::{end} ({distance})");
-        
+
         // Print each line, highlighting the actual match
         for (i, line) in search_result.lines.iter().enumerate() {
             let line_number = start + i;
-            
+
             if line_number == search_result.match_line {
                 // Highlight the matching line with yellow background and black text
                 println!("\x1b[43m\x1b[30m{:4}: {}\x1b[0m", line_number + 1, line);
