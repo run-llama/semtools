@@ -28,7 +28,36 @@ jobs:
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
-        name: "Release ${{ github.ref_name }}"
+        name: "SemTools ${{ github.ref_name }}"
+        body: |
+          ## SemTools ${{ github.ref_name }}
+          
+          A unified package providing both document parsing and semantic search tools:
+          - **parse** - Document parsing tool using LlamaParse API
+          - **search** - Semantic search tool with multilingual embeddings
+          
+          ### Installation
+          
+          ```bash
+          # Install the complete SemTools package (includes both tools)
+          cargo install semtools
+          
+          # Or download pre-built binaries from the assets below
+          ```
+          
+          ### Usage
+          
+          ```bash
+          # Parse documents and search content
+          parse document.pdf | search "error handling"
+          
+          # Direct semantic search
+          search "machine learning" file1.txt file2.txt
+          ```
+          
+          ### What's Changed
+          
+          [Generated release notes will appear here]
 
   build-release:
     name: Build Release
@@ -123,14 +152,34 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Verify version consistency
+      run: |
+        TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
+        SEMTOOLS_VERSION=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "semtools") | .version')
+        
+        echo "Tag version: $TAG_VERSION"
+        echo "SemTools crate version: $SEMTOOLS_VERSION"
+        
+        if [ "$TAG_VERSION" != "$SEMTOOLS_VERSION" ]; then
+          echo "❌ Version mismatch detected!"
+          echo "SemTools version must match the git tag"
+          exit 1
+        fi
+        echo "✅ Version is synchronized"
+
     - name: Login to crates.io
       run: cargo login ${{ secrets.CRATES_TOKEN }}
 
-    - name: Publish parse crate
-      run: cargo publish --package parse --allow-dirty
+    - name: Publish semtools crate
+      run: |
+        echo "Publishing semtools crate (includes both parse and search binaries)..."
+        cargo publish --allow-dirty
 
-    - name: Wait before publishing search crate
-      run: sleep 30
-
-    - name: Publish search crate
-      run: cargo publish --package search --allow-dirty
+    - name: Verify publication
+      run: |
+        echo "✅ SemTools crate published successfully!"
+        echo "Users can now install with: cargo install semtools"

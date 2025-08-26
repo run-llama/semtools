@@ -1774,6 +1774,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "semtools"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "dirs 5.0.1",
+ "hex",
+ "mime_guess",
+ "model2vec-rs",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "simsimd",
+ "tokio",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"

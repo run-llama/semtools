@@ -1,18 +1,19 @@
 [package]
 name = "parse"
-version = "1.0.0"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Parse text into structured data"
-repository = "https://github.com/run-llama/semtools"
-authors = ["Logan Markewich <logan@runllama.ai>"]
+repository.workspace = true
+authors.workspace = true
 categories = ["parse"]
 keywords = ["parse", "text", "structured data"]
 readme = "README.md"
+publish = false  # Published as part of the unified semtools package
 
 [dependencies]
-anyhow = "1.0.99"
-clap = { version = "4.5.45", features = ["derive"] }
+anyhow.workspace = true
+clap.workspace = true
 reqwest = { version = "0.12.23", features = ["multipart", "json"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"

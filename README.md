@@ -12,8 +12,8 @@ A collection of high-performance CLI tools for document processing and semantic 
 ## Quick Start
 
 ```bash
-# Install both tools
-cargo install --path .
+# Install the complete SemTools package
+cargo install semtools
 
 # Parse a PDF and search for specific content
 parse document.pdf | search "error handling"
@@ -33,16 +33,13 @@ echo "some text content" | search "content"
 ### From Source
 
 ```bash
-# Clone the repository
+# Install from crates.io (recommended)
+cargo install semtools
+
+# Or install from source
 git clone https://github.com/yourusername/semtools
 cd semtools
-
-# Install both tools
 cargo install --path .
-
-# Or install individual tools
-cargo install --path crates/parse
-cargo install --path crates/search
 ```
 
 ### Prerequisites
@@ -64,7 +61,6 @@ Arguments:
 Options:
   -c, --parse-config <PARSE_CONFIG>  Path to the config file. Defaults to ~/.parse_config.json
   -b, --backend <BACKEND>            The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
-  -v, --verbose                      Verbose output
   -h, --help                         Print help
   -V, --version                      Print version
 ```
