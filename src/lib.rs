@@ -4,4 +4,4 @@
 pub mod llama_parse_backend;
 
 #[cfg(feature = "parse")]
-pub use llama_parse_backend::{LlamaParseBackend, LlamaParseConfig}; 
+pub use llama_parse_backend::{LlamaParseBackend, LlamaParseConfig};

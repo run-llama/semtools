@@ -270,4 +270,4 @@ mod tests {
         assert_eq!(search_result.match_line, 2);
         assert_eq!(search_result.distance, 0.5);
     }
-} 
+}
