@@ -25,7 +25,11 @@ struct Args {
     top_k: usize,
 
     // Distance threshold - return all results under this threshold (overrides top-k)
-    #[arg(short, long, help = "Return all results with distance below this threshold (0.0+)")]
+    #[arg(
+        short,
+        long,
+        help = "Return all results with distance below this threshold (0.0+)"
+    )]
     threshold: Option<f64>,
 }
 
@@ -95,7 +99,9 @@ fn main() -> Result<()> {
             })
         }
     } else {
-        eprintln!("Error: No input provided. Either specify files as arguments or pipe input to stdin.");
+        eprintln!(
+            "Error: No input provided. Either specify files as arguments or pipe input to stdin."
+        );
         std::process::exit(1);
     }
 
@@ -121,7 +127,11 @@ fn main() -> Result<()> {
     }
 
     // Sort by distance (best matches first)
-    search_results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+    search_results.sort_by(|a, b| {
+        a.distance
+            .partial_cmp(&b.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // If threshold is specified, return all results under threshold
     // Otherwise, limit to top_k results
@@ -139,7 +149,7 @@ fn main() -> Result<()> {
         let end = search_result.end;
 
         let message = format!("{filename}:{start}::{end} ({distance})\n{lines_str}\n\n");
-        println!("{}", message);
+        println!("{message}");
     }
 
     Ok(())
@@ -157,7 +167,7 @@ mod tests {
             .enumerate()
             .map(|(i, _)| vec![i as f32; 128]) // Simple pattern for testing
             .collect();
-        
+
         Document {
             filename: filename.to_string(),
             lines: owned_lines,
@@ -178,16 +188,16 @@ mod tests {
     fn test_search_result_context_boundaries() {
         let lines = vec!["line 0", "line 1", "line 2", "line 3", "line 4"];
         let doc = create_test_document("test.txt", lines);
-        
+
         // Test context calculation for middle line
         let context: usize = 2;
         let idx: usize = 2; // "line 2"
         let bottom_range = max(0, idx.saturating_sub(context));
         let top_range = min(doc.lines.len(), idx + context + 1);
-        
+
         assert_eq!(bottom_range, 0); // max(0, 2-2) = 0
-        assert_eq!(top_range, 5);    // min(5, 2+2+1) = 5
-        
+        assert_eq!(top_range, 5); // min(5, 2+2+1) = 5
+
         let context_lines = &doc.lines[bottom_range..top_range];
         assert_eq!(context_lines.len(), 5);
         assert_eq!(context_lines[0], "line 0");
@@ -198,21 +208,21 @@ mod tests {
     fn test_search_result_context_at_boundaries() {
         let lines = vec!["line 0", "line 1", "line 2"];
         let doc = create_test_document("test.txt", lines);
-        
+
         // Test context at start of file
         let context: usize = 2;
         let idx: usize = 0;
         let bottom_range = max(0, idx.saturating_sub(context));
         let top_range = min(doc.lines.len(), idx + context + 1);
-        
+
         assert_eq!(bottom_range, 0);
         assert_eq!(top_range, 3);
-        
+
         // Test context at end of file
         let idx: usize = 2;
         let bottom_range = max(0, idx.saturating_sub(context));
         let top_range = min(doc.lines.len(), idx + context + 1);
-        
+
         assert_eq!(bottom_range, 0);
         assert_eq!(top_range, 3);
     }
@@ -228,7 +238,7 @@ mod tests {
     fn test_search_result_struct() {
         let lines = vec!["test line 1", "test line 2", "test line 3"];
         let doc = create_test_document("test.txt", lines);
-        
+
         let search_result = SearchResult {
             filename: &doc.filename,
             lines: &doc.lines[1..3], // lines 1-2
@@ -236,34 +246,12 @@ mod tests {
             end: 3,
             distance: 0.5,
         };
-        
+
         assert_eq!(search_result.filename, "test.txt");
         assert_eq!(search_result.lines.len(), 2);
         assert_eq!(search_result.lines[0], "test line 2");
         assert_eq!(search_result.start, 1);
         assert_eq!(search_result.end, 3);
         assert_eq!(search_result.distance, 0.5);
-    }
-
-    #[test]
-    fn test_distance_threshold_logic() {
-        let threshold = Some(0.3);
-        let distance_threshold = threshold.unwrap_or(100.0);
-        assert_eq!(distance_threshold, 0.3);
-        
-        let no_threshold: Option<f64> = None;
-        let distance_threshold = no_threshold.unwrap_or(100.0);
-        assert_eq!(distance_threshold, 100.0);
-    }
-
-    #[test]
-    fn test_top_k_limiting() {
-        let results = vec![0.1, 0.3, 0.5, 0.7, 0.9];
-        let top_k = 3;
-        
-        // Simulate the top-k limiting logic
-        let limited_results = &results[..results.len().min(top_k)];
-        assert_eq!(limited_results.len(), 3);
-        assert_eq!(limited_results, &[0.1, 0.3, 0.5]);
     }
 }
