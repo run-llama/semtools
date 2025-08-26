@@ -232,10 +232,9 @@ tests/
 ## Release Process
 
 1. **Update version numbers** in Cargo.toml files
-2. **Update CHANGELOG.md** with new features and fixes
-3. **Create a release tag**
-4. **Build and test** release binaries
-5. **Publish to crates.io** (maintainers only)
+2. **Create a release tag** - GitHub will automatically generate release notes from merged PRs
+3. **Build and test** release binaries (automated)
+4. **Publish to crates.io** (automated for maintainers)
 
 ## Getting Help
 
@@ -250,7 +249,7 @@ By contributing to SemTools, you agree that your contributions will be licensed 
 ## Recognition
 
 Contributors will be acknowledged in:
-- **CHANGELOG.md** for significant contributions
+- **GitHub release notes** for their merged PRs
 - **README.md** contributors section
 - **Release notes** for major features
 

@@ -25,7 +25,10 @@ impl Default for LlamaParseConfig {
             num_ongoing_requests: 10,
             base_url: Some("https://api.cloud.llamaindex.ai".to_string()),
             parse_kwargs: HashMap::from([
-                ("parse_mode".to_string(), "parse_page_with_agent".to_string()),
+                (
+                    "parse_mode".to_string(),
+                    "parse_page_with_agent".to_string(),
+                ),
                 ("model".to_string(), "openai-gpt-4-1-mini".to_string()),
                 ("high_res_ocr".to_string(), "true".to_string()),
                 ("adaptive_long_table".to_string(), "true".to_string()),
@@ -43,7 +46,7 @@ impl LlamaParseConfig {
         if !Path::new(path).exists() {
             return Ok(Self::default());
         }
-        
+
         let contents = fs::read_to_string(path)?;
         let config: LlamaParseConfig = serde_json::from_str(&contents)?;
         Ok(config)
@@ -109,12 +112,12 @@ impl From<serde_json::Error> for JobError {
 impl std::fmt::Display for JobError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JobError::HttpError(err) => write!(f, "HTTP error: {}", err),
-            JobError::IoError(err) => write!(f, "IO error: {}", err),
+            JobError::HttpError(err) => write!(f, "HTTP error: {err}"),
+            JobError::IoError(err) => write!(f, "IO error: {err}"),
             JobError::TimeoutError => write!(f, "Operation timed out"),
-            JobError::InvalidResponse(msg) => write!(f, "Invalid response: {}", msg),
-            JobError::JoinError(err) => write!(f, "Task join error: {}", err),
-            JobError::SerializationError(err) => write!(f, "Serialization error: {}", err),
+            JobError::InvalidResponse(msg) => write!(f, "Invalid response: {msg}"),
+            JobError::JoinError(err) => write!(f, "Task join error: {err}"),
+            JobError::SerializationError(err) => write!(f, "Serialization error: {err}"),
         }
     }
 }
@@ -131,9 +134,9 @@ impl LlamaParseBackend {
         let cache_dir = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
             .join(".parse");
-        
+
         fs::create_dir_all(&cache_dir)?;
-        
+
         Ok(Self { config, cache_dir })
     }
 
@@ -158,14 +161,14 @@ impl LlamaParseBackend {
         for file_path in files {
             // Skip if file doesn't need parsing
             if self.should_skip_file(&file_path) {
-                eprintln!("Skipping readable file: {}", file_path);
+                eprintln!("Skipping readable file: {file_path}");
                 results.push(file_path);
                 continue;
             }
 
             // Check cache first
             if let Ok(cached_path) = self.get_cached_result(&file_path).await {
-                eprintln!("Using cached result for: {}", file_path);
+                eprintln!("Using cached result for: {file_path}");
                 results.push(cached_path);
                 continue;
             }
@@ -187,7 +190,8 @@ impl LlamaParseBackend {
                     api_key,
                     parse_kwargs,
                     cache_dir,
-                ).await
+                )
+                .await
             });
 
             handles.push(handle);
@@ -198,7 +202,7 @@ impl LlamaParseBackend {
             let result = handle.await?;
             match result {
                 Ok(path) => results.push(path),
-                Err(e) => eprintln!("Error processing file: {:?}", e),
+                Err(e) => eprintln!("Error processing file: {e:?}"),
             }
         }
 
@@ -207,7 +211,7 @@ impl LlamaParseBackend {
 
     fn should_skip_file(&self, file_path: &str) -> bool {
         let path = Path::new(file_path);
-        
+
         // Skip if file doesn't exist
         if !path.exists() {
             return true;
@@ -215,8 +219,22 @@ impl LlamaParseBackend {
 
         // Skip readable text files
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-            matches!(extension.to_lowercase().as_str(), 
-                "txt" | "md" | "rst" | "org" | "csv" | "json" | "xml" | "yaml" | "yml" | "py" | "js" | "ts" | "rs")
+            matches!(
+                extension.to_lowercase().as_str(),
+                "txt"
+                    | "md"
+                    | "rst"
+                    | "org"
+                    | "csv"
+                    | "json"
+                    | "xml"
+                    | "yaml"
+                    | "yml"
+                    | "py"
+                    | "js"
+                    | "ts"
+                    | "rs"
+            )
         } else {
             false
         }
@@ -225,19 +243,19 @@ impl LlamaParseBackend {
     async fn get_cached_result(&self, file_path: &str) -> Result<String, JobError> {
         let metadata = self.get_file_metadata(file_path)?;
         let metadata_path = self.get_metadata_path(file_path);
-        
+
         if !metadata_path.exists() {
             return Err(JobError::InvalidResponse("No cached metadata".to_string()));
         }
 
-        let cached_metadata: FileMetadata = serde_json::from_str(
-            &fs::read_to_string(metadata_path)?
-        )?;
+        let cached_metadata: FileMetadata =
+            serde_json::from_str(&fs::read_to_string(metadata_path)?)?;
 
         // Check if file has changed
-        if cached_metadata.modified_time == metadata.modified_time &&
-           cached_metadata.size == metadata.size &&
-           Path::new(&cached_metadata.parsed_path).exists() {
+        if cached_metadata.modified_time == metadata.modified_time
+            && cached_metadata.size == metadata.size
+            && Path::new(&cached_metadata.parsed_path).exists()
+        {
             Ok(cached_metadata.parsed_path)
         } else {
             Err(JobError::InvalidResponse("Cache invalid".to_string()))
@@ -248,7 +266,8 @@ impl LlamaParseBackend {
         let path = Path::new(file_path);
         let metadata = fs::metadata(path)?;
 
-        let modified_time = metadata.modified()?
+        let modified_time = metadata
+            .modified()?
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
@@ -263,7 +282,7 @@ impl LlamaParseBackend {
     fn get_metadata_path(&self, file_path: &str) -> PathBuf {
         let path = Path::new(file_path);
         let filename = path.file_name().unwrap().to_str().unwrap();
-        self.cache_dir.join(format!("{}.metadata.json", filename))
+        self.cache_dir.join(format!("{filename}.metadata.json"))
     }
 
     async fn process_single_document(
@@ -274,33 +293,21 @@ impl LlamaParseBackend {
         parse_kwargs: HashMap<String, String>,
         cache_dir: PathBuf,
     ) -> Result<String, JobError> {
-        eprintln!("Processing file: {}", file_path);
+        eprintln!("Processing file: {file_path}");
 
         // Create job
-        let job_id = Self::create_parse_job(
-            &client,
-            &file_path,
-            &base_url,
-            &api_key,
-            &parse_kwargs,
-        ).await?;
+        let job_id =
+            Self::create_parse_job(&client, &file_path, &base_url, &api_key, &parse_kwargs).await?;
 
         // Poll for result
         let markdown_content = Self::poll_for_result(
-            &client,
-            &job_id,
-            &base_url,
-            &api_key,
-            3600, // max_timeout
+            &client, &job_id, &base_url, &api_key, 3600, // max_timeout
             5,    // check_interval
-        ).await?;
+        )
+        .await?;
 
         // Write results to disk
-        Self::write_results_to_disk(
-            &file_path,
-            &markdown_content,
-            cache_dir,
-        ).await
+        Self::write_results_to_disk(&file_path, &markdown_content, cache_dir).await
     }
 
     async fn create_parse_job(
@@ -311,11 +318,7 @@ impl LlamaParseBackend {
         parse_kwargs: &HashMap<String, String>,
     ) -> Result<String, JobError> {
         let file_content = fs::read(file_path)?;
-        let filename = Path::new(file_path)
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let filename = Path::new(file_path).file_name().unwrap().to_str().unwrap();
 
         let mime_type = mime_guess::from_path(file_path)
             .first_or_octet_stream()
@@ -334,8 +337,8 @@ impl LlamaParseBackend {
         }
 
         let response = client
-            .post(&format!("{}/api/parsing/upload", base_url))
-            .header("Authorization", format!("Bearer {}", api_key))
+            .post(format!("{base_url}/api/parsing/upload"))
+            .header("Authorization", format!("Bearer {api_key}"))
             .multipart(form)
             .send()
             .await?;
@@ -343,7 +346,7 @@ impl LlamaParseBackend {
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(JobError::InvalidResponse(format!(
-                "Upload failed: {}", error_text
+                "Upload failed: {error_text}"
             )));
         }
 
@@ -372,8 +375,8 @@ impl LlamaParseBackend {
 
             // Check job status
             let status_response = client
-                .get(&format!("{}/api/parsing/job/{}", base_url, job_id))
-                .header("Authorization", format!("Bearer {}", api_key))
+                .get(format!("{base_url}/api/parsing/job/{job_id}"))
+                .header("Authorization", format!("Bearer {api_key}"))
                 .send()
                 .await?;
 
@@ -387,17 +390,16 @@ impl LlamaParseBackend {
                 "SUCCESS" => {
                     // Get the result
                     let result_response = client
-                        .get(&format!(
-                            "{}/api/parsing/job/{}/result/markdown",
-                            base_url, job_id
+                        .get(format!(
+                            "{base_url}/api/parsing/job/{job_id}/result/markdown"
                         ))
-                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Authorization", format!("Bearer {api_key}"))
                         .send()
                         .await?;
 
                     if !result_response.status().is_success() {
                         return Err(JobError::InvalidResponse(
-                            "Failed to get result".to_string()
+                            "Failed to get result".to_string(),
                         ));
                     }
 
@@ -410,12 +412,14 @@ impl LlamaParseBackend {
                 }
                 "ERROR" | "CANCELED" => {
                     return Err(JobError::InvalidResponse(format!(
-                        "Job failed with status: {}", job_status.status
+                        "Job failed with status: {}",
+                        job_status.status
                     )));
                 }
                 _ => {
                     return Err(JobError::InvalidResponse(format!(
-                        "Unknown status: {}", job_status.status
+                        "Unknown status: {}",
+                        job_status.status
                     )));
                 }
             }
@@ -429,16 +433,17 @@ impl LlamaParseBackend {
     ) -> Result<String, JobError> {
         let path = Path::new(file_path);
         let filename = path.file_name().unwrap().to_str().unwrap();
-        
+
         // Write the markdown content
-        let parsed_path = cache_dir.join(format!("{}.md", filename));
+        let parsed_path = cache_dir.join(format!("{filename}.md"));
         fs::write(&parsed_path, markdown_content)?;
 
         // Write metadata
-        let metadata_path = cache_dir.join(format!("{}.metadata.json", filename));
+        let metadata_path = cache_dir.join(format!("{filename}.metadata.json"));
         let file_metadata = fs::metadata(path)?;
 
-        let modified_time = file_metadata.modified()?
+        let modified_time = file_metadata
+            .modified()?
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();

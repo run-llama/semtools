@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     // Validate that files exist
     for file in &args.files {
         if !Path::new(file).exists() {
-            eprintln!("Warning: File does not exist: {}", file);
+            eprintln!("Warning: File does not exist: {file}");
         }
     }
 
@@ -50,14 +50,17 @@ async fn main() -> Result<()> {
         "llama-parse" => {
             let backend = LlamaParseBackend::new(config)?;
             let results = backend.parse(args.files).await?;
-            
+
             // Output the paths to parsed files, one per line
             for result_path in results {
-                println!("{}", result_path);
+                println!("{result_path}");
             }
         }
         _ => {
-            eprintln!("Error: Unknown backend '{}'. Supported backends: llama-parse", args.backend);
+            eprintln!(
+                "Error: Unknown backend '{}'. Supported backends: llama-parse",
+                args.backend
+            );
             std::process::exit(1);
         }
     }
