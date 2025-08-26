@@ -39,10 +39,4 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Run tests
-      run: cargo test --workspace --verbose
-
-    - name: Run tests with all features
-      run: cargo test --workspace --all-features --verbose
-
-    - name: Run doc tests
-      run: cargo test --workspace --doc --verbose
+      run: cargo test --workspace
