@@ -25,7 +25,7 @@ struct Args {
     top_k: usize,
 
     // Distance threshold - return all results under this threshold (overrides top-k)
-    #[arg(short, long, help = "Return all results with distance below this threshold (0.0-1.0)")]
+    #[arg(short, long, help = "Return all results with distance below this threshold (0.0+)")]
     threshold: Option<f64>,
 }
 
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
         for (idx, line_embedding) in doc.embeddings.iter().enumerate() {
             let distance = f32::cosine(&query_embedding, line_embedding);
             if let Some(distance) = distance {
-                let distance_threshold = args.threshold.unwrap_or(0.5);
+                let distance_threshold = args.threshold.unwrap_or(100.0);
                 if distance < distance_threshold {
                     let bottom_range = max(0, idx.saturating_sub(args.context));
                     let top_range = min(doc.lines.len(), idx + args.context + 1);
