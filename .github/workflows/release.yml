@@ -98,7 +98,7 @@ jobs:
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build release binaries
-      run: cargo build --release --workspace --target ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }}
 
     - name: Create archive (Unix)
       if: runner.os != 'Windows'
