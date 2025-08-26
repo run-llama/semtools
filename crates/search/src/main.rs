@@ -20,9 +20,13 @@ struct Args {
     #[arg(short, long, default_value_t = 3)]
     context: usize,
 
-    // The top-k files or texts to return
+    // The top-k files or texts to return (ignored if threshold is set)
     #[arg(long, default_value_t = 3)]
     top_k: usize,
+
+    // Distance threshold - return all results under this threshold (overrides top-k)
+    #[arg(short, long, help = "Return all results with distance below this threshold (0.0-1.0)")]
+    threshold: Option<f64>,
 }
 
 pub struct Document {
@@ -100,7 +104,8 @@ fn main() -> Result<()> {
         for (idx, line_embedding) in doc.embeddings.iter().enumerate() {
             let distance = f32::cosine(&query_embedding, line_embedding);
             if let Some(distance) = distance {
-                if distance < 0.5 {
+                let distance_threshold = args.threshold.unwrap_or(0.5);
+                if distance < distance_threshold {
                     let bottom_range = max(0, idx.saturating_sub(args.context));
                     let top_range = min(doc.lines.len(), idx + args.context + 1);
                     search_results.push(SearchResult {
@@ -118,8 +123,15 @@ fn main() -> Result<()> {
     // Sort by distance (best matches first)
     search_results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Limit to top_k results
-    for search_result in search_results.iter().take(args.top_k) {
+    // If threshold is specified, return all results under threshold
+    // Otherwise, limit to top_k results
+    let results_to_show = if args.threshold.is_some() {
+        &search_results[..]
+    } else {
+        &search_results[..search_results.len().min(args.top_k)]
+    };
+
+    for search_result in results_to_show {
         let filename = search_result.filename.to_string();
         let lines_str = search_result.lines.join("\n");
         let distance = search_result.distance;
