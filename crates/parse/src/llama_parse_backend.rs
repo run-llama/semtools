@@ -1,6 +1,5 @@
 use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,11 +21,18 @@ pub struct LlamaParseConfig {
 impl Default for LlamaParseConfig {
     fn default() -> Self {
         Self {
-            api_key: None,
+            api_key: std::env::var("LLAMA_CLOUD_API_KEY").ok(),
             num_ongoing_requests: 10,
             base_url: Some("https://api.cloud.llamaindex.ai".to_string()),
-            parse_kwargs: HashMap::new(),
-            check_interval: 1,
+            parse_kwargs: HashMap::from([
+                ("parse_mode".to_string(), "parse_page_with_agent".to_string()),
+                ("model".to_string(), "openai-gpt-4-1-mini".to_string()),
+                ("high_res_ocr".to_string(), "true".to_string()),
+                ("adaptive_long_table".to_string(), "true".to_string()),
+                ("outlined_table_extraction".to_string(), "true".to_string()),
+                ("output_tables_as_HTML".to_string(), "true".to_string()),
+            ]),
+            check_interval: 5,
             max_timeout: 3600,
         }
     }
@@ -61,7 +67,6 @@ struct JobResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FileMetadata {
-    hash: String,
     modified_time: u64,
     size: u64,
     parsed_path: String,
@@ -153,14 +158,14 @@ impl LlamaParseBackend {
         for file_path in files {
             // Skip if file doesn't need parsing
             if self.should_skip_file(&file_path) {
-                println!("Skipping readable file: {}", file_path);
+                eprintln!("Skipping readable file: {}", file_path);
                 results.push(file_path);
                 continue;
             }
 
             // Check cache first
             if let Ok(cached_path) = self.get_cached_result(&file_path).await {
-                println!("Using cached result for: {}", file_path);
+                eprintln!("Using cached result for: {}", file_path);
                 results.push(cached_path);
                 continue;
             }
@@ -211,7 +216,7 @@ impl LlamaParseBackend {
         // Skip readable text files
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
             matches!(extension.to_lowercase().as_str(), 
-                "txt" | "md" | "rst" | "org" | "csv" | "json" | "xml" | "yaml" | "yml")
+                "txt" | "md" | "rst" | "org" | "csv" | "json" | "xml" | "yaml" | "yml" | "py" | "js" | "ts" | "rs")
         } else {
             false
         }
@@ -230,8 +235,7 @@ impl LlamaParseBackend {
         )?;
 
         // Check if file has changed
-        if cached_metadata.hash == metadata.hash && 
-           cached_metadata.modified_time == metadata.modified_time &&
+        if cached_metadata.modified_time == metadata.modified_time &&
            cached_metadata.size == metadata.size &&
            Path::new(&cached_metadata.parsed_path).exists() {
             Ok(cached_metadata.parsed_path)
@@ -243,11 +247,6 @@ impl LlamaParseBackend {
     fn get_file_metadata(&self, file_path: &str) -> Result<FileMetadata, JobError> {
         let path = Path::new(file_path);
         let metadata = fs::metadata(path)?;
-        
-        let contents = fs::read(path)?;
-        let mut hasher = Sha256::new();
-        hasher.update(&contents);
-        let hash = hex::encode(hasher.finalize());
 
         let modified_time = metadata.modified()?
             .duration_since(UNIX_EPOCH)
@@ -255,7 +254,6 @@ impl LlamaParseBackend {
             .as_secs();
 
         Ok(FileMetadata {
-            hash,
             modified_time,
             size: metadata.len(),
             parsed_path: String::new(), // Will be set later
@@ -276,7 +274,7 @@ impl LlamaParseBackend {
         parse_kwargs: HashMap<String, String>,
         cache_dir: PathBuf,
     ) -> Result<String, JobError> {
-        println!("Processing file: {}", file_path);
+        eprintln!("Processing file: {}", file_path);
 
         // Create job
         let job_id = Self::create_parse_job(
@@ -294,7 +292,7 @@ impl LlamaParseBackend {
             &base_url,
             &api_key,
             3600, // max_timeout
-            1,    // check_interval
+            5,    // check_interval
         ).await?;
 
         // Write results to disk
@@ -439,11 +437,6 @@ impl LlamaParseBackend {
         // Write metadata
         let metadata_path = cache_dir.join(format!("{}.metadata.json", filename));
         let file_metadata = fs::metadata(path)?;
-        
-        let contents = fs::read(path)?;
-        let mut hasher = Sha256::new();
-        hasher.update(&contents);
-        let hash = hex::encode(hasher.finalize());
 
         let modified_time = file_metadata.modified()?
             .duration_since(UNIX_EPOCH)
@@ -451,7 +444,6 @@ impl LlamaParseBackend {
             .as_secs();
 
         let metadata = FileMetadata {
-            hash,
             modified_time,
             size: file_metadata.len(),
             parsed_path: parsed_path.to_string_lossy().to_string(),
