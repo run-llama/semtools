@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Create Release
+      id: create_release
+      uses: ncipollo/release-action@v1
+      with:
+        generateReleaseNotes: true
+        makeLatest: true
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
+        name: "Release ${{ github.ref_name }}"
+
+  build-release:
+    name: Build Release
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: semtools-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: semtools-windows-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: semtools-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: semtools-macos-aarch64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build release binaries
+      run: cargo build --release --workspace --target ${{ matrix.target }}
+
+    - name: Create archive (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        mkdir -p release
+        cp target/${{ matrix.target }}/release/parse release/
+        cp target/${{ matrix.target }}/release/search release/
+        cp README.md release/ 2>/dev/null || echo "README.md not found"
+        cd release
+        tar czf ../${{ matrix.artifact_name }}.tar.gz *
+
+    - name: Create archive (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        mkdir release
+        copy target\${{ matrix.target }}\release\parse.exe release\
+        copy target\${{ matrix.target }}\release\search.exe release\
+        copy README.md release\ 2>nul || echo "README.md not found"
+        cd release
+        7z a ..\${{ matrix.artifact_name }}.zip *
+
+    - name: Upload Release Asset (Unix)
+      if: runner.os != 'Windows'
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: ${{ matrix.artifact_name }}.tar.gz
+        token: ${{ secrets.GITHUB_TOKEN }}
+        omitBody: true
+        omitName: true
+
+    - name: Upload Release Asset (Windows)
+      if: runner.os == 'Windows'
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: ${{ matrix.artifact_name }}.zip
+        token: ${{ secrets.GITHUB_TOKEN }}
+        omitBody: true
+        omitName: true
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Login to crates.io
+      run: cargo login ${{ secrets.CRATES_TOKEN }}
+
+    - name: Publish parse crate
+      run: cargo publish --package parse --allow-dirty
+
+    - name: Wait before publishing search crate
+      run: sleep 30
+
+    - name: Publish search crate
+      run: cargo publish --package search --allow-dirty
