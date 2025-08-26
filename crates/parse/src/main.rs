@@ -20,10 +20,6 @@ struct Args {
     /// Files to parse
     #[clap(required = true)]
     files: Vec<String>,
-
-    /// Verbose output
-    #[clap(short, long)]
-    verbose: bool,
 }
 
 #[tokio::main]
@@ -41,12 +37,6 @@ async fn main() -> Result<()> {
 
     // Load configuration
     let config = LlamaParseConfig::from_config_file(&config_path)?;
-
-    if args.verbose {
-        eprintln!("Using config file: {}", config_path);
-        eprintln!("Backend: {}", args.backend);
-        eprintln!("Processing {} files", args.files.len());
-    }
 
     // Validate that files exist
     for file in &args.files {
