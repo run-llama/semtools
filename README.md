@@ -163,14 +163,10 @@ parse report.pdf | search "summary" > results.txt
 - [Parse Tool Documentation](crates/parse/README.md)
 - [Search Tool Documentation](crates/search/README.md)
 
-## Architecture
+## Future Work
 
-```
-semtools/
-├── crates/
-│   ├── parse/          # Document parsing tool
-│   ├── search/         # Semantic search tool  
-```
+- [ ] More parsing backends (something local-only would be great!)
+- [ ] Allowing model selection for the search tool
 
 ## Contributing
 
