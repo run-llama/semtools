@@ -14,7 +14,7 @@ We welcome contributions to SemTools! This document provides guidelines for cont
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/semtools
+   git clone https://github.com/run-llama/semtools
    cd semtools
    ```
 

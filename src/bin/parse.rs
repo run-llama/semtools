@@ -1,10 +1,8 @@
-mod llama_parse_backend;
-
 use anyhow::Result;
 use clap::Parser;
 use std::path::Path;
 
-use llama_parse_backend::{LlamaParseBackend, LlamaParseConfig};
+use semtools::{LlamaParseBackend, LlamaParseConfig};
 
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for parsing documents using various backends", long_about = None)]
@@ -66,4 +64,4 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
+} 

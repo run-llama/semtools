@@ -1374,22 +1374,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parse"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "dirs 5.0.1",
- "hex",
- "mime_guess",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
-]
-
-[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1739,16 +1723,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "search"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "model2vec-rs",
- "simsimd",
-]
 
 [[package]]
 name = "security-framework"
