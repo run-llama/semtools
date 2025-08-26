@@ -11,9 +11,14 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 ## Quick Start
 
+Prerequisites:
+
+- [Rust + Cargo](https://www.rust-lang.org/tools/install)
+- For the `parse` tool: LlamaIndex Cloud API key
+
 ```bash
-# Install both tools
-cargo install --path .
+# Install the complete SemTools package
+cargo install semtools
 
 # Parse a PDF and search for specific content
 parse document.pdf | search "error handling"
@@ -27,28 +32,6 @@ search "machine learning" file1.txt file2.txt --context 5 --threshold 0.3
 # Search from stdin
 echo "some text content" | search "content"
 ```
-
-## Installation
-
-### From Source
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/semtools
-cd semtools
-
-# Install both tools
-cargo install --path .
-
-# Or install individual tools
-cargo install --path crates/parse
-cargo install --path crates/search
-```
-
-### Prerequisites
-
-- Rust 1.70+ 
-- For the `parse` tool: LlamaIndex Cloud API key
 
 ## CLI Usage
 
@@ -64,7 +47,6 @@ Arguments:
 Options:
   -c, --parse-config <PARSE_CONFIG>  Path to the config file. Defaults to ~/.parse_config.json
   -b, --backend <BACKEND>            The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
-  -v, --verbose                      Verbose output
   -h, --help                         Print help
   -V, --version                      Print version
 ```
@@ -176,19 +158,15 @@ parse report.pdf | search "summary" > results.txt
 - **Multi-format support** for documents (PDF, DOCX, PPTX, etc.)
 - **Concurrent processing** for better performance
 
-## Documentation
+## Further Documentation
 
 - [Parse Tool Documentation](crates/parse/README.md)
 - [Search Tool Documentation](crates/search/README.md)
 
-## Architecture
+## Future Work
 
-```
-semtools/
-├── crates/
-│   ├── parse/          # Document parsing tool
-│   ├── search/         # Semantic search tool  
-```
+- [ ] More parsing backends (something local-only would be great!)
+- [ ] Allowing model selection for the search tool
 
 ## Contributing
 

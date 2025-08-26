@@ -13,11 +13,8 @@ A high-performance CLI tool for parsing documents into markdown (using LlamaPars
 ## Installation
 
 ```bash
-# Install from the workspace root
-cargo install --path crates/parse
-
-# Or install the entire semtools suite
-cargo install --path .
+# Install the complete SemTools package
+cargo install semtools
 ```
 
 ## CLI Usage
