@@ -44,6 +44,7 @@ pub struct SearchResult<'a> {
     lines: &'a [String],
     start: usize,
     end: usize,
+    match_line: usize, // The actual line number that matched
     distance: f64,
 }
 
@@ -120,6 +121,7 @@ fn main() -> Result<()> {
                         distance,
                         start: bottom_range,
                         end: top_range,
+                        match_line: idx,
                     })
                 }
             }
@@ -143,13 +145,25 @@ fn main() -> Result<()> {
 
     for search_result in results_to_show {
         let filename = search_result.filename.to_string();
-        let lines_str = search_result.lines.join("\n");
         let distance = search_result.distance;
         let start = search_result.start;
         let end = search_result.end;
 
-        let message = format!("{filename}:{start}::{end} ({distance})\n{lines_str}\n\n");
-        println!("{message}");
+        println!("{filename}:{start}::{end} ({distance})");
+
+        // Print each line, highlighting the actual match
+        for (i, line) in search_result.lines.iter().enumerate() {
+            let line_number = start + i;
+
+            if line_number == search_result.match_line {
+                // Highlight the matching line with yellow background and black text
+                println!("\x1b[43m\x1b[30m{:4}: {}\x1b[0m", line_number + 1, line);
+            } else {
+                // Regular context line
+                println!("{:4}: {}", line_number + 1, line);
+            }
+        }
+        println!(); // Empty line between results
     }
 
     Ok(())
@@ -244,6 +258,7 @@ mod tests {
             lines: &doc.lines[1..3], // lines 1-2
             start: 1,
             end: 3,
+            match_line: 2, // The actual matching line
             distance: 0.5,
         };
 
@@ -252,6 +267,7 @@ mod tests {
         assert_eq!(search_result.lines[0], "test line 2");
         assert_eq!(search_result.start, 1);
         assert_eq!(search_result.end, 3);
+        assert_eq!(search_result.match_line, 2);
         assert_eq!(search_result.distance, 0.5);
     }
 }

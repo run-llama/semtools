@@ -1,7 +1,14 @@
 [package]
 name = "search"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+license = "MIT"
+description = "Search for text in files, but smarter"
+repository = "https://github.com/run-llama/semtools"
+authors = ["Logan Markewich <logan@runllama.ai>"]
+categories = ["search"]
+keywords = ["search", "text", "files"]
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4.5.45", features = ["derive"] }
