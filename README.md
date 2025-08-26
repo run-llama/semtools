@@ -11,6 +11,11 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 ## Quick Start
 
+Prerequisites:
+
+- [Rust + Cargo](https://www.rust-lang.org/tools/install)
+- For the `parse` tool: LlamaIndex Cloud API key
+
 ```bash
 # Install the complete SemTools package
 cargo install semtools
@@ -27,25 +32,6 @@ search "machine learning" file1.txt file2.txt --context 5 --threshold 0.3
 # Search from stdin
 echo "some text content" | search "content"
 ```
-
-## Installation
-
-### From Source
-
-```bash
-# Install from crates.io (recommended)
-cargo install semtools
-
-# Or install from source
-git clone https://github.com/yourusername/semtools
-cd semtools
-cargo install --path .
-```
-
-### Prerequisites
-
-- Rust 1.70+ 
-- For the `parse` tool: LlamaIndex Cloud API key
 
 ## CLI Usage
 
@@ -172,7 +158,7 @@ parse report.pdf | search "summary" > results.txt
 - **Multi-format support** for documents (PDF, DOCX, PPTX, etc.)
 - **Concurrent processing** for better performance
 
-## Documentation
+## Further Documentation
 
 - [Parse Tool Documentation](crates/parse/README.md)
 - [Search Tool Documentation](crates/search/README.md)

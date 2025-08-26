@@ -14,11 +14,8 @@ A semantic search CLI tool that uses multilingual embeddings to find relevant co
 ## Installation
 
 ```bash
-# Install from the workspace root
-cargo install --path crates/search
-
-# Or install the entire semtools suite  
-cargo install --path .
+# Install the complete SemTools package
+cargo install semtools
 ```
 
 ## Usage
