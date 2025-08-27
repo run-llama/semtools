@@ -16,6 +16,9 @@ pub struct LlamaParseConfig {
     pub parse_kwargs: HashMap<String, String>,
     pub check_interval: u64,
     pub max_timeout: u64,
+    pub max_retries: usize,
+    pub retry_delay_ms: u64,
+    pub backoff_multiplier: f64,
 }
 
 impl Default for LlamaParseConfig {
@@ -37,6 +40,9 @@ impl Default for LlamaParseConfig {
             ]),
             check_interval: 5,
             max_timeout: 3600,
+            max_retries: 10,
+            retry_delay_ms: 1000,
+            backoff_multiplier: 2.0,
         }
     }
 }
@@ -83,6 +89,7 @@ pub enum JobError {
     InvalidResponse(String),
     JoinError(tokio::task::JoinError),
     SerializationError(serde_json::Error),
+    RetryExhausted(String),
 }
 
 impl From<reqwest::Error> for JobError {
@@ -118,6 +125,7 @@ impl std::fmt::Display for JobError {
             JobError::InvalidResponse(msg) => write!(f, "Invalid response: {msg}"),
             JobError::JoinError(err) => write!(f, "Task join error: {err}"),
             JobError::SerializationError(err) => write!(f, "Serialization error: {err}"),
+            JobError::RetryExhausted(msg) => write!(f, "Retry attempts exhausted: {msg}"),
         }
     }
 }
@@ -132,13 +140,14 @@ pub struct LlamaParseBackend {
 impl LlamaParseBackend {
     pub fn new(config: LlamaParseConfig) -> anyhow::Result<Self> {
         let cache_dir = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+            .ok_or_else(|| anyhow::Error::msg("Could not find home directory"))?
             .join(".parse");
 
         fs::create_dir_all(&cache_dir)?;
 
         Ok(Self { config, cache_dir })
     }
+
 
     pub async fn parse(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
         let client = Arc::new(Client::new());
@@ -179,6 +188,11 @@ impl LlamaParseBackend {
             let api_key = api_key.clone();
             let parse_kwargs = self.config.parse_kwargs.clone();
             let cache_dir = self.cache_dir.clone();
+            let max_retries = self.config.max_retries;
+            let retry_delay_ms = self.config.retry_delay_ms;
+            let backoff_multiplier = self.config.backoff_multiplier;
+            let check_interval = self.config.check_interval;
+            let max_timeout = self.config.max_timeout;
 
             let handle = tokio::spawn(async move {
                 let _permit = semaphore.acquire_owned().await.unwrap();
@@ -190,6 +204,11 @@ impl LlamaParseBackend {
                     api_key,
                     parse_kwargs,
                     cache_dir,
+                    max_retries,
+                    retry_delay_ms,
+                    backoff_multiplier,
+                    check_interval,
+                    max_timeout,
                 )
                 .await
             });
@@ -292,22 +311,179 @@ impl LlamaParseBackend {
         api_key: String,
         parse_kwargs: HashMap<String, String>,
         cache_dir: PathBuf,
+        max_retries: usize,
+        retry_delay_ms: u64,
+        backoff_multiplier: f64,
+        check_interval: u64,
+        max_timeout: u64,
     ) -> Result<String, JobError> {
         eprintln!("Processing file: {file_path}");
 
-        // Create job
-        let job_id =
-            Self::create_parse_job(&client, &file_path, &base_url, &api_key, &parse_kwargs).await?;
+        // Create job with retry
+        let job_id = Self::create_parse_job_with_retry(
+            &client,
+            &file_path,
+            &base_url,
+            &api_key,
+            &parse_kwargs,
+            max_retries,
+            retry_delay_ms,
+            backoff_multiplier,
+        ).await?;
 
-        // Poll for result
-        let markdown_content = Self::poll_for_result(
-            &client, &job_id, &base_url, &api_key, 3600, // max_timeout
-            5,    // check_interval
-        )
-        .await?;
+        // Poll for result with retry
+        let markdown_content = Self::poll_for_result_with_retry(
+            &client,
+            &job_id,
+            &base_url,
+            &api_key,
+            max_timeout,
+            check_interval,
+            max_retries,
+            retry_delay_ms,
+            backoff_multiplier,
+        ).await?;
 
         // Write results to disk
         Self::write_results_to_disk(&file_path, &markdown_content, cache_dir).await
+    }
+
+    async fn create_parse_job_with_retry(
+        client: &reqwest::Client,
+        file_path: &str,
+        base_url: &str,
+        api_key: &str,
+        parse_kwargs: &HashMap<String, String>,
+        max_retries: usize,
+        retry_delay_ms: u64,
+        backoff_multiplier: f64,
+    ) -> Result<String, JobError> {
+        let file_path = file_path.to_string();
+        let base_url = base_url.to_string();
+        let api_key = api_key.to_string();
+        let parse_kwargs = parse_kwargs.clone();
+        let client = client.clone();
+
+        let mut last_error = None;
+        
+        for attempt in 0..=max_retries {
+            match Self::create_parse_job(&client, &file_path, &base_url, &api_key, &parse_kwargs).await {
+                Ok(job_id) => return Ok(job_id),
+                Err(JobError::HttpError(err)) => {
+                    last_error = Some(err.to_string());
+                    
+                    // Don't retry on the last attempt
+                    if attempt == max_retries {
+                        return Err(JobError::RetryExhausted(format!(
+                            "Job creation failed after {} attempts. Last error: {}",
+                            max_retries + 1,
+                            err
+                        )));
+                    }
+                    
+                    // Check if error is retryable
+                    let is_retryable = err.is_connect() ||
+                        err.is_timeout() ||
+                        err.is_request() ||
+                        err.to_string().contains("broken pipe") ||
+                        err.to_string().contains("connection reset") ||
+                        err.to_string().contains("connection aborted") ||
+                        err.to_string().contains("network unreachable") ||
+                        (err.status().map(|s| s.is_server_error()).unwrap_or(false));
+                    
+                    if !is_retryable {
+                        return Err(JobError::HttpError(err));
+                    }
+                    
+                    // Calculate backoff delay
+                    let delay = retry_delay_ms as f64 * backoff_multiplier.powi(attempt as i32);
+                    let delay_ms = delay as u64;
+                    
+                    eprintln!("Job creation failed (attempt {}/{}): {}. Retrying in {}ms...", 
+                             attempt + 1, max_retries + 1, err, delay_ms);
+                    
+                    sleep(Duration::from_millis(delay_ms)).await;
+                }
+                Err(other_err) => return Err(other_err), // Don't retry non-HTTP errors
+            }
+        }
+        
+        // This should never be reached due to the logic above, but just in case
+        Err(JobError::RetryExhausted(format!(
+            "Unexpected retry exhaustion during job creation. Last error: {}",
+            last_error.unwrap_or_else(|| "Unknown".to_string())
+        )))
+    }
+
+    async fn poll_for_result_with_retry(
+        client: &reqwest::Client,
+        job_id: &str,
+        base_url: &str,
+        api_key: &str,
+        max_timeout: u64,
+        check_interval: u64,
+        max_retries: usize,
+        retry_delay_ms: u64,
+        backoff_multiplier: f64,
+    ) -> Result<String, JobError> {
+        let job_id = job_id.to_string();
+        let base_url = base_url.to_string();
+        let api_key = api_key.to_string();
+        let client = client.clone();
+
+        let mut last_error = None;
+        
+        for attempt in 0..=max_retries {
+            match Self::poll_for_result(&client, &job_id, &base_url, &api_key, max_timeout, check_interval).await {
+                Ok(result) => return Ok(result),
+                Err(JobError::HttpError(err)) => {
+                    last_error = Some(err.to_string());
+                    
+                    // Don't retry on the last attempt
+                    if attempt == max_retries {
+                        return Err(JobError::RetryExhausted(format!(
+                            "Polling failed after {} attempts. Last error: {}",
+                            max_retries + 1,
+                            err
+                        )));
+                    }
+                    
+                    // Check if error is retryable
+                    let is_retryable = err.is_connect() ||
+                        err.is_timeout() ||
+                        err.is_request() ||
+                        err.to_string().contains("broken pipe") ||
+                        err.to_string().contains("connection reset") ||
+                        err.to_string().contains("connection aborted") ||
+                        err.to_string().contains("network unreachable") ||
+                        (err.status().map(|s| s.is_server_error()).unwrap_or(false));
+                    
+                    if !is_retryable {
+                        return Err(JobError::HttpError(err));
+                    }
+                    
+                    // Calculate backoff delay
+                    let delay = retry_delay_ms as f64 * backoff_multiplier.powi(attempt as i32);
+                    let delay_ms = delay as u64;
+                    
+                    eprintln!("Polling failed (attempt {}/{}): {}. Retrying in {}ms...", 
+                             attempt + 1, max_retries + 1, err, delay_ms);
+                    
+                    sleep(Duration::from_millis(delay_ms)).await;
+                }
+                Err(JobError::TimeoutError) => {
+                    // Timeout errors are not retryable as they indicate the job itself timed out
+                    return Err(JobError::TimeoutError);
+                }
+                Err(other_err) => return Err(other_err), // Don't retry other errors
+            }
+        }
+        
+        // This should never be reached due to the logic above, but just in case
+        Err(JobError::RetryExhausted(format!(
+            "Unexpected retry exhaustion during polling. Last error: {}",
+            last_error.unwrap_or_else(|| "Unknown".to_string())
+        )))
     }
 
     async fn create_parse_job(
