@@ -7,7 +7,7 @@ use std::fs::read_to_string;
 use std::io::{self, BufRead, IsTerminal};
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
 struct Args {
     // Query to search for (positional argument)
     query: String,
@@ -17,20 +17,21 @@ struct Args {
     files: Vec<String>,
 
     // How many lines before/after to return as context
-    #[arg(short, long, default_value_t = 3)]
-    context: usize,
+    #[arg(short = 'n', long = "n-lines", alias = "context", default_value_t = 3)]
+    n_lines: usize,
 
-    // The top-k files or texts to return (ignored if threshold is set)
+    // The top-k files or texts to return (ignored if max_distance is set)
     #[arg(long, default_value_t = 3)]
     top_k: usize,
 
     // Distance threshold - return all results under this threshold (overrides top-k)
     #[arg(
-        short,
-        long,
+        short = 'm',
+        long = "max-distance",
+        alias = "threshold",
         help = "Return all results with distance below this threshold (0.0+)"
     )]
-    threshold: Option<f64>,
+    max_distance: Option<f64>,
 }
 
 pub struct Document {
@@ -111,10 +112,10 @@ fn main() -> Result<()> {
         for (idx, line_embedding) in doc.embeddings.iter().enumerate() {
             let distance = f32::cosine(&query_embedding, line_embedding);
             if let Some(distance) = distance {
-                let distance_threshold = args.threshold.unwrap_or(100.0);
+                let distance_threshold = args.max_distance.unwrap_or(100.0);
                 if distance < distance_threshold {
-                    let bottom_range = max(0, idx.saturating_sub(args.context));
-                    let top_range = min(doc.lines.len(), idx + args.context + 1);
+                    let bottom_range = max(0, idx.saturating_sub(args.n_lines));
+                    let top_range = min(doc.lines.len(), idx + args.n_lines + 1);
                     search_results.push(SearchResult {
                         filename: &doc.filename,
                         lines: &doc.lines[bottom_range..top_range],
@@ -137,7 +138,7 @@ fn main() -> Result<()> {
 
     // If threshold is specified, return all results under threshold
     // Otherwise, limit to top_k results
-    let results_to_show = if args.threshold.is_some() {
+    let results_to_show = if args.max_distance.is_some() {
         &search_results[..]
     } else {
         &search_results[..search_results.len().min(args.top_k)]
