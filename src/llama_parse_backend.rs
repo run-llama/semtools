@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlamaParseConfig {
     pub api_key: Option<String>,
     pub num_ongoing_requests: usize,
@@ -148,7 +148,6 @@ impl LlamaParseBackend {
         Ok(Self { config, cache_dir })
     }
 
-
     pub async fn parse(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
         let client = Arc::new(Client::new());
         let semaphore = Arc::new(Semaphore::new(self.config.num_ongoing_requests));
@@ -186,29 +185,14 @@ impl LlamaParseBackend {
             let semaphore = Arc::clone(&semaphore);
             let base_url = base_url.clone();
             let api_key = api_key.clone();
-            let parse_kwargs = self.config.parse_kwargs.clone();
+            let config = self.config.clone();
             let cache_dir = self.cache_dir.clone();
-            let max_retries = self.config.max_retries;
-            let retry_delay_ms = self.config.retry_delay_ms;
-            let backoff_multiplier = self.config.backoff_multiplier;
-            let check_interval = self.config.check_interval;
-            let max_timeout = self.config.max_timeout;
 
             let handle = tokio::spawn(async move {
                 let _permit = semaphore.acquire_owned().await.unwrap();
 
                 Self::process_single_document(
-                    client,
-                    file_path,
-                    base_url,
-                    api_key,
-                    parse_kwargs,
-                    cache_dir,
-                    max_retries,
-                    retry_delay_ms,
-                    backoff_multiplier,
-                    check_interval,
-                    max_timeout,
+                    client, file_path, base_url, api_key, config, cache_dir,
                 )
                 .await
             });
@@ -309,40 +293,20 @@ impl LlamaParseBackend {
         file_path: String,
         base_url: String,
         api_key: String,
-        parse_kwargs: HashMap<String, String>,
+        config: LlamaParseConfig,
         cache_dir: PathBuf,
-        max_retries: usize,
-        retry_delay_ms: u64,
-        backoff_multiplier: f64,
-        check_interval: u64,
-        max_timeout: u64,
     ) -> Result<String, JobError> {
         eprintln!("Processing file: {file_path}");
 
         // Create job with retry
-        let job_id = Self::create_parse_job_with_retry(
-            &client,
-            &file_path,
-            &base_url,
-            &api_key,
-            &parse_kwargs,
-            max_retries,
-            retry_delay_ms,
-            backoff_multiplier,
-        ).await?;
+        let job_id =
+            Self::create_parse_job_with_retry(&client, &file_path, &base_url, &api_key, &config)
+                .await?;
 
         // Poll for result with retry
-        let markdown_content = Self::poll_for_result_with_retry(
-            &client,
-            &job_id,
-            &base_url,
-            &api_key,
-            max_timeout,
-            check_interval,
-            max_retries,
-            retry_delay_ms,
-            backoff_multiplier,
-        ).await?;
+        let markdown_content =
+            Self::poll_for_result_with_retry(&client, &job_id, &base_url, &api_key, &config)
+                .await?;
 
         // Write results to disk
         Self::write_results_to_disk(&file_path, &markdown_content, cache_dir).await
@@ -353,61 +317,66 @@ impl LlamaParseBackend {
         file_path: &str,
         base_url: &str,
         api_key: &str,
-        parse_kwargs: &HashMap<String, String>,
-        max_retries: usize,
-        retry_delay_ms: u64,
-        backoff_multiplier: f64,
+        config: &LlamaParseConfig,
     ) -> Result<String, JobError> {
         let file_path = file_path.to_string();
         let base_url = base_url.to_string();
         let api_key = api_key.to_string();
-        let parse_kwargs = parse_kwargs.clone();
+        let parse_kwargs = config.parse_kwargs.clone();
         let client = client.clone();
 
         let mut last_error = None;
-        
-        for attempt in 0..=max_retries {
-            match Self::create_parse_job(&client, &file_path, &base_url, &api_key, &parse_kwargs).await {
+
+        for attempt in 0..=config.max_retries {
+            match Self::create_parse_job(&client, &file_path, &base_url, &api_key, &parse_kwargs)
+                .await
+            {
                 Ok(job_id) => return Ok(job_id),
                 Err(JobError::HttpError(err)) => {
                     last_error = Some(err.to_string());
-                    
+
                     // Don't retry on the last attempt
-                    if attempt == max_retries {
+                    if attempt == config.max_retries {
                         return Err(JobError::RetryExhausted(format!(
                             "Job creation failed after {} attempts. Last error: {}",
-                            max_retries + 1,
+                            config.max_retries + 1,
                             err
                         )));
                     }
-                    
+
                     // Check if error is retryable
-                    let is_retryable = err.is_connect() ||
-                        err.is_timeout() ||
-                        err.is_request() ||
-                        err.to_string().contains("broken pipe") ||
-                        err.to_string().contains("connection reset") ||
-                        err.to_string().contains("connection aborted") ||
-                        err.to_string().contains("network unreachable") ||
-                        (err.status().map(|s| s.is_server_error()).unwrap_or(false));
-                    
+                    let is_retryable = err.is_connect()
+                        || err.is_timeout()
+                        || err.is_request()
+                        || err.to_string().contains("broken pipe")
+                        || err.to_string().contains("connection reset")
+                        || err.to_string().contains("connection aborted")
+                        || err.to_string().contains("network unreachable")
+                        || (err.status().map(|s| s.is_server_error()).unwrap_or(false));
+
                     if !is_retryable {
                         return Err(JobError::HttpError(err));
                     }
-                    
+
                     // Calculate backoff delay
-                    let delay = retry_delay_ms as f64 * backoff_multiplier.powi(attempt as i32);
+                    let delay = config.retry_delay_ms as f64
+                        * config.backoff_multiplier.powi(attempt as i32);
                     let delay_ms = delay as u64;
-                    
-                    eprintln!("Job creation failed (attempt {}/{}): {}. Retrying in {}ms...", 
-                             attempt + 1, max_retries + 1, err, delay_ms);
-                    
+
+                    eprintln!(
+                        "Job creation failed (attempt {}/{}): {}. Retrying in {}ms...",
+                        attempt + 1,
+                        config.max_retries + 1,
+                        err,
+                        delay_ms
+                    );
+
                     sleep(Duration::from_millis(delay_ms)).await;
                 }
                 Err(other_err) => return Err(other_err), // Don't retry non-HTTP errors
             }
         }
-        
+
         // This should never be reached due to the logic above, but just in case
         Err(JobError::RetryExhausted(format!(
             "Unexpected retry exhaustion during job creation. Last error: {}",
@@ -420,11 +389,7 @@ impl LlamaParseBackend {
         job_id: &str,
         base_url: &str,
         api_key: &str,
-        max_timeout: u64,
-        check_interval: u64,
-        max_retries: usize,
-        retry_delay_ms: u64,
-        backoff_multiplier: f64,
+        config: &LlamaParseConfig,
     ) -> Result<String, JobError> {
         let job_id = job_id.to_string();
         let base_url = base_url.to_string();
@@ -432,43 +397,58 @@ impl LlamaParseBackend {
         let client = client.clone();
 
         let mut last_error = None;
-        
-        for attempt in 0..=max_retries {
-            match Self::poll_for_result(&client, &job_id, &base_url, &api_key, max_timeout, check_interval).await {
+
+        for attempt in 0..=config.max_retries {
+            match Self::poll_for_result(
+                &client,
+                &job_id,
+                &base_url,
+                &api_key,
+                config.max_timeout,
+                config.check_interval,
+            )
+            .await
+            {
                 Ok(result) => return Ok(result),
                 Err(JobError::HttpError(err)) => {
                     last_error = Some(err.to_string());
-                    
+
                     // Don't retry on the last attempt
-                    if attempt == max_retries {
+                    if attempt == config.max_retries {
                         return Err(JobError::RetryExhausted(format!(
                             "Polling failed after {} attempts. Last error: {}",
-                            max_retries + 1,
+                            config.max_retries + 1,
                             err
                         )));
                     }
-                    
+
                     // Check if error is retryable
-                    let is_retryable = err.is_connect() ||
-                        err.is_timeout() ||
-                        err.is_request() ||
-                        err.to_string().contains("broken pipe") ||
-                        err.to_string().contains("connection reset") ||
-                        err.to_string().contains("connection aborted") ||
-                        err.to_string().contains("network unreachable") ||
-                        (err.status().map(|s| s.is_server_error()).unwrap_or(false));
-                    
+                    let is_retryable = err.is_connect()
+                        || err.is_timeout()
+                        || err.is_request()
+                        || err.to_string().contains("broken pipe")
+                        || err.to_string().contains("connection reset")
+                        || err.to_string().contains("connection aborted")
+                        || err.to_string().contains("network unreachable")
+                        || (err.status().map(|s| s.is_server_error()).unwrap_or(false));
+
                     if !is_retryable {
                         return Err(JobError::HttpError(err));
                     }
-                    
+
                     // Calculate backoff delay
-                    let delay = retry_delay_ms as f64 * backoff_multiplier.powi(attempt as i32);
+                    let delay = config.retry_delay_ms as f64
+                        * config.backoff_multiplier.powi(attempt as i32);
                     let delay_ms = delay as u64;
-                    
-                    eprintln!("Polling failed (attempt {}/{}): {}. Retrying in {}ms...", 
-                             attempt + 1, max_retries + 1, err, delay_ms);
-                    
+
+                    eprintln!(
+                        "Polling failed (attempt {}/{}): {}. Retrying in {}ms...",
+                        attempt + 1,
+                        config.max_retries + 1,
+                        err,
+                        delay_ms
+                    );
+
                     sleep(Duration::from_millis(delay_ms)).await;
                 }
                 Err(JobError::TimeoutError) => {
@@ -478,7 +458,7 @@ impl LlamaParseBackend {
                 Err(other_err) => return Err(other_err), // Don't retry other errors
             }
         }
-        
+
         // This should never be reached due to the logic above, but just in case
         Err(JobError::RetryExhausted(format!(
             "Unexpected retry exhaustion during polling. Last error: {}",
