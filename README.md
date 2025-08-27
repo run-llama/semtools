@@ -77,7 +77,6 @@ Options:
   -t, --threshold <THRESHOLD>  Return all results with distance below this threshold (0.0-1.0)
   -h, --help                   Print help
   -V, --version                Print version
-loganmarkewich@Mac semtools % 
 ```
 
 ## Configuration
