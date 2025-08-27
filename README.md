@@ -16,24 +16,36 @@ Prerequisites:
 - [Rust + Cargo](https://www.rust-lang.org/tools/install)
 - For the `parse` tool: LlamaIndex Cloud API key
 
+Install:
+
 ```bash
-# Install the complete SemTools package
+# install entire crate
 cargo install semtools
 
-# Parse a PDF and search for specific content
-parse document.pdf | search "error handling"
+# install only parse
+cargo install semtools --no-default-features --features=parse
 
-# Search within file contents (not filenames)  
-parse document.pdf | cat | search "API endpoints"
+# install only search
+cargo install semtools --no-default-features --features=search
+```
+
+Basic Usage:
+
+```bash
+# Parse a PDF and search for specific content
+parse document.pdf | cat | search "error handling"
+
+# Search within many files after parsing
+parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
 
 # Search with custom context and thresholds
-search "machine learning" file1.txt file2.txt --context 5 --threshold 0.3
+search "machine learning" *.txt --context 5 --threshold 0.3
 
 # Search from stdin
 echo "some text content" | search "content"
 ```
 
-## CLI Usage
+## CLI Help
 
 ```bash
 parse --help
@@ -65,7 +77,6 @@ Options:
   -t, --threshold <THRESHOLD>  Return all results with distance below this threshold (0.0-1.0)
   -h, --help                   Print help
   -V, --version                Print version
-loganmarkewich@Mac semtools % 
 ```
 
 ## Configuration
@@ -128,13 +139,10 @@ parse document.pdf | cat | search "revenue" --threshold 0.2
 search "error handling" src/*.rs --top-k 5
 
 # Combine with grep for exact-match pre-filtering and distance thresholding
-parse *.pdf | cat | grep -i "error" | search "network error" --threshold 0.3
+parse *.pdf | xargs cat | grep -i "error" | search "network error" --threshold 0.3
 
 # Pipeline with content search (note the 'cat')
-find . -name "*.md" | head -10 | xargs parse | cat | search "installation"
-
-# Search with extended context
-search "database" --context 10 --threshold 0.1 < input.txt
+find . -name "*.md" | xargs parse | xargs cat | search "installation"
 ```
 
 ### Unix Pipeline Integration
@@ -142,11 +150,11 @@ search "database" --context 10 --threshold 0.1 < input.txt
 The tools follow Unix philosophy and work seamlessly with standard tools:
 
 ```bash
-# Combine with grep for filtering
-parse docs/*.pdf | search "API" | grep -A5 "authentication"
+# Combine with grep for filtering (could be before or after parse/search!)
+parse docs/*.pdf | xargs -n 1 search "API" | grep -A5 "authentication"
 
 # Use with xargs for batch processing
-find . -name "*.pdf" | xargs parse | search "conclusion" 
+find . -name "*.pdf" | xargs parse | xargs -n 1 search "conclusion" 
 
 # Save search results
 parse report.pdf | search "summary" > results.txt
