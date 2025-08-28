@@ -42,13 +42,13 @@ Basic Usage:
 
 ```bash
 # Parse a PDF and search for specific content
-parse document.pdf | cat | search "error handling"
+parse document.pdf | xargs cat | search "error handling"
 
 # Search within many files after parsing
 parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
 
-# Search with custom context and thresholds
-search "machine learning" *.txt --context 5 --threshold 0.3
+# Search with custom context and thresholds or distance thresholds
+search "machine learning" *.txt --n-lines 5 --max-distance 0.3
 
 # Search from stdin
 echo "some text content" | search "content"
@@ -137,10 +137,10 @@ export LLAMA_CLOUD_API_KEY="your_api_key_here"
 parse report.pdf data.xlsx presentation.pptx
 
 # Chain parsing with semantic search
-parse *.pdf | cat | search "financial projections" --context 3
+parse *.pdf | xargs -n 1 search "financial projections" --n-lines 3
 
 # Search with distance threshold (lower = more similar)
-parse document.pdf | cat | search "revenue" --threshold 0.2
+parse document.pdf | xargs cat | search "revenue" --max-distance 0.2
 ```
 
 ### Advanced Search Patterns
@@ -150,10 +150,10 @@ parse document.pdf | cat | search "revenue" --threshold 0.2
 search "error handling" src/*.rs --top-k 5
 
 # Combine with grep for exact-match pre-filtering and distance thresholding
-parse *.pdf | xargs cat | grep -i "error" | search "network error" --threshold 0.3
+parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
 
 # Pipeline with content search (note the 'cat')
-find . -name "*.md" | xargs parse | xargs cat | search "installation"
+find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
 ```
 
 ### Unix Pipeline Integration
