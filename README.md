@@ -171,10 +171,10 @@ find . -name "*.pdf" | xargs parse | xargs -n 1 search "conclusion"
 parse report.pdf | search "summary" > results.txt
 ```
 
-## Further Documentation
+## Agent Use Case Examples
 
-- [Parse Tool Documentation](crates/parse/README.md)
-- [Search Tool Documentation](crates/search/README.md)
+- [Using Semtools with Coding Agents](examples/use_with_coding_agents.md)
+- [Using Semtools with MCP](examples/use_with_mcp.md)
 
 ## Future Work
 
