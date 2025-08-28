@@ -116,10 +116,10 @@ To configure the `parse` tool, create a `~/.parse_config.json` file with the fol
   "parse_kwargs": {
     "parse_mode": "parse_page_with_agent",
     "model": "openai-gpt-4-1-mini",
-    "high_res_ocr": true,
-    "adaptive_long_table": true,
-    "outlined_table_extraction": true,
-    "output_tables_as_HTML": true
+    "high_res_ocr": "true",
+    "adaptive_long_table": "true",
+    "outlined_table_extraction": "true",
+    "output_tables_as_HTML": "true"
   }
 }
 ```
