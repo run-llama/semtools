@@ -29,35 +29,6 @@ jobs:
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
         name: "SemTools ${{ github.ref_name }}"
-        body: |
-          ## SemTools ${{ github.ref_name }}
-          
-          A unified package providing both document parsing and semantic search tools:
-          - **parse** - Document parsing tool using LlamaParse API
-          - **search** - Semantic search tool with multilingual embeddings
-          
-          ### Installation
-          
-          ```bash
-          # Install the complete SemTools package (includes both tools)
-          cargo install semtools
-          
-          # Or download pre-built binaries from the assets below
-          ```
-          
-          ### Usage
-          
-          ```bash
-          # Parse documents and search content
-          parse document.pdf | search "error handling"
-          
-          # Direct semantic search
-          search "machine learning" file1.txt file2.txt
-          ```
-          
-          ### What's Changed
-          
-          [Generated release notes will appear here]
 
   build-release:
     name: Build Release
