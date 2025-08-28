@@ -29,8 +29,6 @@ jobs:
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
         name: "SemTools ${{ github.ref_name }}"
-        body: |
-          ## SemTools ${{ github.ref_name }}
 
   build-release:
     name: Build Release
