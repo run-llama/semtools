@@ -41,17 +41,30 @@ cargo install semtools --no-default-features --features=search
 Basic Usage:
 
 ```bash
-# Parse a PDF and search for specific content
-parse document.pdf | xargs cat | search "error handling"
+# Parse some files
+parse my_dir/*.pdf
 
-# Search within many files after parsing
+# Search some (text-based) files
+search "some keywords" *.txt --max-distance 0.3 --n-lines 5
+
+# Combine parsing and search
 parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
+```
 
-# Search with custom context and thresholds or distance thresholds
-search "machine learning" *.txt --n-lines 5 --max-distance 0.3
+Advanced Usage:
 
-# Search from stdin
-echo "some text content" | search "content"
+```bash
+# Combine with grep for exact-match pre-filtering and distance thresholding
+parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
+
+# Pipeline with content search (note the 'cat')
+find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
+
+# Combine with grep for filtering (grep could be before or after parse/search!)
+parse docs/*.pdf | xargs -n 1 search "API" | grep -A5 "authentication"
+
+# Save search results
+parse report.pdf | xargs cat | search "summary" > results.txt
 ```
 
 ## CLI Help
@@ -127,49 +140,6 @@ To configure the `parse` tool, create a `~/.parse_config.json` file with the fol
 Or just set via environment variable:
 ```bash
 export LLAMA_CLOUD_API_KEY="your_api_key_here"
-```
-
-## Usage Examples
-
-### Basic Document Parsing and Search
-
-```bash
-# Parse multiple documents
-parse report.pdf data.xlsx presentation.pptx
-
-# Chain parsing with semantic search
-parse *.pdf | xargs -n 1 search "financial projections" --n-lines 3
-
-# Search with distance threshold (lower = more similar)
-parse document.pdf | xargs cat | search "revenue" --max-distance 0.2
-```
-
-### Advanced Search Patterns
-
-```bash
-# Search multiple files directly
-search "error handling" src/*.rs --top-k 5
-
-# Combine with grep for exact-match pre-filtering and distance thresholding
-parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
-
-# Pipeline with content search (note the 'cat')
-find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
-```
-
-### Unix Pipeline Integration
-
-The tools follow Unix philosophy and work seamlessly with standard tools:
-
-```bash
-# Combine with grep for filtering (could be before or after parse/search!)
-parse docs/*.pdf | xargs -n 1 search "API" | grep -A5 "authentication"
-
-# Use with xargs for batch processing
-find . -name "*.pdf" | xargs parse | xargs -n 1 search "conclusion" 
-
-# Save search results
-parse report.pdf | search "summary" > results.txt
 ```
 
 ## Agent Use Case Examples
