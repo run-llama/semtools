@@ -98,6 +98,9 @@ To configure the `parse` tool, create a `~/.parse_config.json` file with the fol
   "base_url": "https://api.cloud.llamaindex.ai",
   "check_interval": 5,
   "max_timeout": 3600,
+  "max_retries": 10,
+  "retry_delay_ms": 1000,
+  "backoff_multiplier": 2.0,
   "parse_kwargs": {
     "parse_mode": "parse_page_with_agent",
     "model": "openai-gpt-4-1-mini",
