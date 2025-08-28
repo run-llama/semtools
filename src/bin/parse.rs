@@ -18,6 +18,10 @@ struct Args {
     /// Files to parse
     #[clap(required = true)]
     files: Vec<String>,
+
+    /// Verbose output while parsing
+    #[clap(short, long)]
+    verbose: bool,
 }
 
 #[tokio::main]
@@ -46,7 +50,7 @@ async fn main() -> Result<()> {
     // Create backend and process files
     match args.backend.as_str() {
         "llama-parse" => {
-            let backend = LlamaParseBackend::new(config)?;
+            let backend = LlamaParseBackend::new(config, args.verbose)?;
             let results = backend.parse(args.files).await?;
 
             // Output the paths to parsed files, one per line

@@ -135,17 +135,22 @@ impl std::error::Error for JobError {}
 pub struct LlamaParseBackend {
     config: LlamaParseConfig,
     cache_dir: PathBuf,
+    verbose: bool,
 }
 
 impl LlamaParseBackend {
-    pub fn new(config: LlamaParseConfig) -> anyhow::Result<Self> {
+    pub fn new(config: LlamaParseConfig, verbose: bool) -> anyhow::Result<Self> {
         let cache_dir = dirs::home_dir()
             .ok_or_else(|| anyhow::Error::msg("Could not find home directory"))?
             .join(".parse");
 
         fs::create_dir_all(&cache_dir)?;
 
-        Ok(Self { config, cache_dir })
+        Ok(Self {
+            config,
+            cache_dir,
+            verbose,
+        })
     }
 
     pub async fn parse(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
@@ -169,14 +174,18 @@ impl LlamaParseBackend {
         for file_path in files {
             // Skip if file doesn't need parsing
             if self.should_skip_file(&file_path) {
-                eprintln!("Skipping readable file: {file_path}");
+                if self.verbose {
+                    eprintln!("Skipping readable file: {file_path}");
+                }
                 results.push(file_path);
                 continue;
             }
 
             // Check cache first
             if let Ok(cached_path) = self.get_cached_result(&file_path).await {
-                eprintln!("Using cached result for: {file_path}");
+                if self.verbose {
+                    eprintln!("Using cached result for: {file_path}");
+                }
                 results.push(cached_path);
                 continue;
             }
@@ -187,12 +196,13 @@ impl LlamaParseBackend {
             let api_key = api_key.clone();
             let config = self.config.clone();
             let cache_dir = self.cache_dir.clone();
+            let verbose = self.verbose;
 
             let handle = tokio::spawn(async move {
                 let _permit = semaphore.acquire_owned().await.unwrap();
 
                 Self::process_single_document(
-                    client, file_path, base_url, api_key, config, cache_dir,
+                    client, file_path, base_url, api_key, config, cache_dir, verbose,
                 )
                 .await
             });
@@ -295,8 +305,11 @@ impl LlamaParseBackend {
         api_key: String,
         config: LlamaParseConfig,
         cache_dir: PathBuf,
+        verbose: bool,
     ) -> Result<String, JobError> {
-        eprintln!("Processing file: {file_path}");
+        if verbose {
+            eprintln!("Processing file: {file_path}");
+        }
 
         // Create job with retry
         let job_id =

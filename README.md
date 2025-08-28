@@ -68,6 +68,7 @@ Arguments:
 Options:
   -c, --parse-config <PARSE_CONFIG>  Path to the config file. Defaults to ~/.parse_config.json
   -b, --backend <BACKEND>            The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
+  -v, --verbose                      Verbose output while parsing
   -h, --help                         Print help
   -V, --version                      Print version
 ```
