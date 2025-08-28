@@ -7,7 +7,9 @@ A collection of high-performance CLI tools for document processing and semantic 
 ## Tools
 
 - **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
-- **`search`** - Semantic search using multilingual embeddings with cosine similarity matching and per-line context matching
+- **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
+
+**NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` remains local-only.
 
 ## Key Features
 
