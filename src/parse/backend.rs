@@ -76,7 +76,13 @@ impl LlamaParseBackend {
                 let _permit = semaphore.acquire_owned().await.unwrap();
 
                 Self::process_single_document(
-                    client, file_path, base_url, api_key, config, cache_manager, verbose,
+                    client,
+                    file_path,
+                    base_url,
+                    api_key,
+                    config,
+                    cache_manager,
+                    verbose,
                 )
                 .await
             });
@@ -124,4 +130,4 @@ impl LlamaParseBackend {
             .write_results_to_disk(&file_path, &markdown_content)
             .await
     }
-} 
+}

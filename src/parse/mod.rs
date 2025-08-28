@@ -6,4 +6,4 @@ pub mod error;
 
 pub use backend::LlamaParseBackend;
 pub use config::LlamaParseConfig;
-pub use error::JobError; 
+pub use error::JobError;

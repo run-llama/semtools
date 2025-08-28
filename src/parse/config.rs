@@ -52,4 +52,4 @@ impl LlamaParseConfig {
         let config: LlamaParseConfig = serde_json::from_str(&contents)?;
         Ok(config)
     }
-} 
+}

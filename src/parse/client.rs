@@ -50,7 +50,8 @@ impl ParseClient {
         let mut last_error = None;
 
         for attempt in 0..=config.max_retries {
-            match self.create_parse_job(&file_path, &base_url, &api_key, &parse_kwargs)
+            match self
+                .create_parse_job(&file_path, &base_url, &api_key, &parse_kwargs)
                 .await
             {
                 Ok(job_id) => return Ok(job_id),
@@ -120,14 +121,15 @@ impl ParseClient {
         let mut last_error = None;
 
         for attempt in 0..=config.max_retries {
-            match self.poll_for_result(
-                &job_id,
-                &base_url,
-                &api_key,
-                config.max_timeout,
-                config.check_interval,
-            )
-            .await
+            match self
+                .poll_for_result(
+                    &job_id,
+                    &base_url,
+                    &api_key,
+                    config.max_timeout,
+                    config.check_interval,
+                )
+                .await
             {
                 Ok(result) => return Ok(result),
                 Err(JobError::HttpError(err)) => {
@@ -212,7 +214,8 @@ impl ParseClient {
             form = form.text(key.clone(), value.clone());
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{base_url}/api/parsing/upload"))
             .header("Authorization", format!("Bearer {api_key}"))
             .multipart(form)
@@ -250,7 +253,8 @@ impl ParseClient {
             }
 
             // Check job status
-            let status_response = self.client
+            let status_response = self
+                .client
                 .get(format!("{base_url}/api/parsing/job/{job_id}"))
                 .header("Authorization", format!("Bearer {api_key}"))
                 .send()
@@ -265,7 +269,8 @@ impl ParseClient {
             match job_status.status.as_str() {
                 "SUCCESS" => {
                     // Get the result
-                    let result_response = self.client
+                    let result_response = self
+                        .client
                         .get(format!(
                             "{base_url}/api/parsing/job/{job_id}/result/markdown"
                         ))
@@ -301,4 +306,10 @@ impl ParseClient {
             }
         }
     }
-} 
+}
+
+impl Default for ParseClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}

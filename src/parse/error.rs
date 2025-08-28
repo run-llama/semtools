@@ -47,4 +47,4 @@ impl std::fmt::Display for JobError {
     }
 }
 
-impl std::error::Error for JobError {} 
+impl std::error::Error for JobError {}
