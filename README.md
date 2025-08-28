@@ -4,8 +4,6 @@
 
 A collection of high-performance CLI tools for document processing and semantic search, built with Rust for speed and reliability.
 
-## Tools
-
 - **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
 - **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
 
