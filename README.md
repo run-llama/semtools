@@ -9,6 +9,15 @@ A collection of high-performance CLI tools for document processing and semantic 
 - **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
 - **`search`** - Semantic search using multilingual embeddings with cosine similarity matching and per-line context matching
 
+## Key Features
+
+- **Fast semantic search** using model2vec embeddings, without the burden of a vector database
+- **Reliable document parsing** with caching and error handling  
+- **Unix-friendly** design with proper stdin/stdout handling
+- **Configurable** distance thresholds and returned chunk sizes
+- **Multi-format support** for parsing documents (PDF, DOCX, PPTX, etc.)
+- **Concurrent processing** for better parsing performance
+
 ## Quick Start
 
 Prerequisites:
@@ -65,6 +74,8 @@ Options:
 
 ```bash
 search --help
+A CLI tool for fast semantic keyword search
+
 Usage: search [OPTIONS] <QUERY> [FILES]...
 
 Arguments:
@@ -72,11 +83,11 @@ Arguments:
   [FILES]...  Files or directories to search
 
 Options:
-  -c, --context <CONTEXT>      [default: 3]
-      --top-k <TOP_K>          [default: 3]
-  -t, --threshold <THRESHOLD>  Return all results with distance below this threshold (0.0-1.0)
-  -h, --help                   Print help
-  -V, --version                Print version
+  -n, --n-lines <N_LINES>            [default: 3]
+      --top-k <TOP_K>                [default: 3]
+  -m, --max-distance <MAX_DISTANCE>  Return all results with distance below this threshold (0.0+)
+  -h, --help                         Print help
+  -V, --version                      Print version
 ```
 
 ## Configuration
@@ -159,15 +170,6 @@ find . -name "*.pdf" | xargs parse | xargs -n 1 search "conclusion"
 # Save search results
 parse report.pdf | search "summary" > results.txt
 ```
-
-## Key Features
-
-- **Fast semantic search** using model2vec embeddings
-- **Reliable document parsing** with caching and error handling  
-- **Unix-friendly** design with proper stdin/stdout handling
-- **Configurable** similarity thresholds and context windows
-- **Multi-format support** for documents (PDF, DOCX, PPTX, etc.)
-- **Concurrent processing** for better performance
 
 ## Further Documentation
 
