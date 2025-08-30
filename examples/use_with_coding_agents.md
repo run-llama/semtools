@@ -23,11 +23,28 @@ Let's walk through an example of using `semtools` with Claude-Code.
 cargo install semtools
 ```
 
-## 2. Ensure your parse config or `LLAMA_CLOUD_API_KEY` is set
+## 2. Configure your parsing backend
 
+**Option A: LlamaParse (Cloud)**
 ```bash
 export LLAMA_CLOUD_API_KEY=your_api_key
 ```
+
+**Option B: LMStudio (Local - Private)**
+```bash
+# 1. Install and start LMStudio with a model
+# 2. Create ~/.lmstudio_parse_config.json:
+{
+  "base_url": "http://localhost:1234/v1",
+  "model": "llama-3.2-3b-instruct"
+}
+```
+
+**Why use LMStudio?**
+- ✅ Complete privacy (documents never leave your machine)
+- ✅ No API costs 
+- ✅ Works offline
+- ✅ No rate limits
 
 ## 3. Seed your `CLAUDE.md` file (or `AGENTS.md`, etc.) with knowledge about semtools
 
@@ -82,7 +99,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 ⏺ I can see there are 910 ACL 2023 papers in PDF format. Now I'll parse all these PDFs to make them searchable, then look for papers
   discussing LLMs and evaluations.
 
-⏺ Bash(parse *.pdf)
+⏺ Bash(parse *.pdf --backend lmstudio)  # Using local LMStudio for privacy
   ⎿  /Users/loganmarkewich/.parse/2023.acl-long.0.pdf.md 
      /Users/loganmarkewich/.parse/2023.acl-long.1.pdf.md
      /Users/loganmarkewich/.parse/2023.acl-long.10.pdf.md
@@ -96,7 +113,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 
 ⏺ Great! Now I have parsed all the PDFs. Let me search for papers related to LLMs and evaluations using the search tool.
 
-⏺ Bash(parse *.pdf | xargs cat | search "large language model, evaluation, assessment, benchmark" --n-lines 5 --max-distance 0.4)
+⏺ Bash(parse *.pdf --backend lmstudio | xargs cat | search "large language model, evaluation, assessment, benchmark" --n-lines 5 --max-distance 0.4)
   ⎿  <stdin>:447094::447105 (0.16900031210055844)
      447095: for Computational Linguistics.
      447096:
