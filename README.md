@@ -48,7 +48,7 @@ parse my_dir/*.pdf
 search "some keywords" *.txt --max-distance 0.3 --n-lines 5
 
 # Combine parsing and search
-parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
+parse my_docs/*.pdf | xargs search "API endpoints"
 ```
 
 Advanced Usage:
@@ -58,10 +58,10 @@ Advanced Usage:
 parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
 
 # Pipeline with content search (note the 'cat')
-find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
+find . -name "*.md" | xargs parse | xargs search "installation"
 
 # Combine with grep for filtering (grep could be before or after parse/search!)
-parse docs/*.pdf | xargs -n 1 search "API" | grep -A5 "authentication"
+parse docs/*.pdf | xargs search "API" | grep -A5 "authentication"
 
 # Save search results
 parse report.pdf | xargs cat | search "summary" > results.txt

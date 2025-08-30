@@ -52,7 +52,7 @@ Options:
 parse document.pdf | xargs cat | search "error handling"
 
 # Search within many files after parsing
-parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
+parse my_docs/*.pdf | xargs search "API endpoints"
 
 # Search with custom context and thresholds or distance thresholds
 search "machine learning" *.txt --n-lines 5 --max-distance 0.3
@@ -64,7 +64,7 @@ echo "some text content" | search "content"
 parse report.pdf data.xlsx presentation.pptx
 
 # Chain parsing with semantic search
-parse *.pdf | xargs -n 1 search "financial projections" --n-lines 3
+parse *.pdf | xargs search "financial projections" --n-lines 3
 
 # Search with distance threshold (lower = more similar)
 parse document.pdf | xargs cat | search "revenue" --max-distance 0.2
@@ -76,7 +76,7 @@ search "error handling" src/*.rs --top-k 5
 parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
 
 # Pipeline with content search (note the 'cat')
-find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
+find . -name "*.md" | xargs parse | xargs search "installation"
 ```
 
 ## Tips for using these tools
