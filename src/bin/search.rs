@@ -381,6 +381,6 @@ mod tests {
         assert_eq!(args.n_lines, 3);
         assert_eq!(args.top_k, 3);
         assert_eq!(args.max_distance, None);
-        assert_eq!(args.ignore_case, false);
+        assert!(!args.ignore_case);
     }
 }
