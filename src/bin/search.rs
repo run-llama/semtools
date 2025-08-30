@@ -9,31 +9,26 @@ use std::io::{self, BufRead, IsTerminal};
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
 struct Args {
-    // Query to search for (positional argument)
+    /// Query to search for (positional argument)
     query: String,
 
-    // Files or directories to search (positional arguments, optional if using stdin)
+    /// Files or directories to search (positional arguments, optional if using stdin)
     #[arg(help = "Files or directories to search")]
     files: Vec<String>,
 
-    // How many lines before/after to return as context
+    /// How many lines before/after to return as context
     #[arg(short = 'n', long = "n-lines", alias = "context", default_value_t = 3)]
     n_lines: usize,
 
-    // The top-k files or texts to return (ignored if max_distance is set)
+    /// The top-k files or texts to return (ignored if max_distance is set)
     #[arg(long, default_value_t = 3)]
     top_k: usize,
 
-    // Distance threshold - return all results under this threshold (overrides top-k)
-    #[arg(
-        short = 'm',
-        long = "max-distance",
-        alias = "threshold",
-        help = "Return all results with distance below this threshold (0.0+)"
-    )]
+    /// Return all results with distance below this threshold (0.0+)
+    #[arg(short = 'm', long = "max-distance", alias = "threshold")]
     max_distance: Option<f64>,
 
-    // Perform case-insensitive search (default is false)
+    /// Perform case-insensitive search (default is false)
     #[arg(short, long, default_value_t = false)]
     ignore_case: bool,
 }
@@ -230,7 +225,7 @@ mod tests {
         let embeddings: Vec<Vec<f32>> = owned_lines
             .iter()
             .enumerate()
-            .map(|(i, _)| vec![i as f32; 128]) // Simple pattern for testing
+            .map(|(i, _)| vec![(i as f32) + 1.0; 128]) // Simple pattern for testing
             .collect();
 
         Document {
@@ -261,7 +256,7 @@ mod tests {
         let documents = vec![doc1, doc2];
 
         let args = create_test_args("test query");
-        let query_embedding = vec![1.0; 128]; // Dummy query embedding
+        let query_embedding = vec![1.0; 128];
 
         let results = search_documents(&documents, &query_embedding, &args);
 
@@ -281,7 +276,7 @@ mod tests {
         let mut args = create_test_args("test");
         args.max_distance = Some(0.5); // Very restrictive threshold
 
-        let query_embedding = vec![0.0; 128]; // Different from test embeddings
+        let query_embedding = vec![0.0; 128];
         let results = search_documents(&documents, &query_embedding, &args);
 
         // With restrictive threshold, should have fewer or no results
@@ -319,14 +314,14 @@ mod tests {
         let mut args = create_test_args("test");
         args.n_lines = 1; // 1 line of context before/after
 
-        let query_embedding = vec![2.0; 128]; // Should match index 3
+        let query_embedding = vec![2.0; 128]; // Should match index 2
         let results = search_documents(&documents, &query_embedding, &args);
 
         if !results.is_empty() {
             let result = &results[0];
-            // With 1 line context and match at index 3, should get lines 2-5 (indices 2,3,4)
-            assert_eq!(result.start, 2);
-            assert_eq!(result.end, 5);
+            // With 1 line context and match at index 2, should get lines 1-4 (indices 1,2,3)
+            assert_eq!(result.start, 1);
+            assert_eq!(result.end, 4);
             assert_eq!(result.lines.len(), 3);
         }
     }

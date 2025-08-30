@@ -33,13 +33,14 @@ A CLI tool for fast semantic keyword search
 Usage: search [OPTIONS] <QUERY> [FILES]...
 
 Arguments:
-  <QUERY>     
+  <QUERY>     Query to search for (positional argument)
   [FILES]...  Files or directories to search
 
 Options:
-  -n, --n-lines <N_LINES>            [default: 3]
-      --top-k <TOP_K>                [default: 3]
+  -n, --n-lines <N_LINES>            How many lines before/after to return as context [default: 3]
+      --top-k <TOP_K>                The top-k files or texts to return (ignored if max_distance is set) [default: 3]
   -m, --max-distance <MAX_DISTANCE>  Return all results with distance below this threshold (0.0+)
+  -i, --ignore-case                  Perform case-insensitive search (default is false)
   -h, --help                         Print help
   -V, --version                      Print version
 ```
