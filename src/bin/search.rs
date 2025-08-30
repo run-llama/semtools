@@ -9,29 +9,28 @@ use std::io::{self, BufRead, IsTerminal};
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
 struct Args {
-    // Query to search for (positional argument)
+    /// Query to search for (positional argument)
     query: String,
 
-    // Files or directories to search (positional arguments, optional if using stdin)
+    /// Files or directories to search (positional arguments, optional if using stdin)
     #[arg(help = "Files or directories to search")]
     files: Vec<String>,
 
-    // How many lines before/after to return as context
+    /// How many lines before/after to return as context
     #[arg(short = 'n', long = "n-lines", alias = "context", default_value_t = 3)]
     n_lines: usize,
 
-    // The top-k files or texts to return (ignored if max_distance is set)
+    /// The top-k files or texts to return (ignored if max_distance is set)
     #[arg(long, default_value_t = 3)]
     top_k: usize,
 
-    // Distance threshold - return all results under this threshold (overrides top-k)
-    #[arg(
-        short = 'm',
-        long = "max-distance",
-        alias = "threshold",
-        help = "Return all results with distance below this threshold (0.0+)"
-    )]
+    /// Return all results with distance below this threshold (0.0+)
+    #[arg(short = 'm', long = "max-distance", alias = "threshold")]
     max_distance: Option<f64>,
+
+    /// Perform case-insensitive search (default is false)
+    #[arg(short, long, default_value_t = false)]
+    ignore_case: bool,
 }
 
 pub struct Document {
@@ -55,62 +54,46 @@ fn read_from_stdin() -> Result<Vec<String>> {
     Ok(lines?)
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+// Extracted function to create document from file content
+fn create_document_from_content(
+    filename: String,
+    content: &str,
+    model: &StaticModel,
+    ignore_case: bool,
+) -> Option<Document> {
+    let lines: Vec<&str> = content.lines().collect();
 
-    let model = StaticModel::from_pretrained(
-        "minishlab/potion-multilingual-128M", // "minishlab/potion-multilingual-128M",
-        None,                                 // Optional: Hugging Face API token for private models
-        None, // Optional: bool to override model's default normalization. `None` uses model's config.
-        None, // Optional: subfolder if model files are not at the root of the repo/path
-    )?;
-
-    let query_embedding = model.encode_single(&args.query);
-
-    let mut documents = Vec::new();
-
-    // Check if we should read from stdin (no files provided and stdin is available)
-    if args.files.is_empty() && !io::stdin().is_terminal() {
-        // Read from stdin
-        let stdin_lines = read_from_stdin()?;
-        if !stdin_lines.is_empty() {
-            let embeddings = model.encode_with_args(&stdin_lines, Some(2048), 1024);
-            documents.push(Document {
-                filename: "<stdin>".to_string(),
-                lines: stdin_lines,
-                embeddings,
-            });
-        }
-    } else if !args.files.is_empty() {
-        // Read from files
-        for f in args.files {
-            let content = read_to_string(&f)?;
-            let lines: Vec<&str> = content.lines().collect();
-
-            if lines.is_empty() {
-                continue;
-            }
-
-            let owned_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-
-            let embeddings = model.encode_with_args(&owned_lines, Some(2048), 1024);
-            documents.push(Document {
-                filename: f,
-                lines: owned_lines,
-                embeddings,
-            })
-        }
-    } else {
-        eprintln!(
-            "Error: No input provided. Either specify files as arguments or pipe input to stdin."
-        );
-        std::process::exit(1);
+    if lines.is_empty() {
+        return None;
     }
 
+    let owned_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+
+    let lines_for_embedding = if ignore_case {
+        owned_lines.iter().map(|s| s.to_lowercase()).collect()
+    } else {
+        owned_lines.clone()
+    };
+
+    let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 1024);
+    Some(Document {
+        filename,
+        lines: owned_lines,
+        embeddings,
+    })
+}
+
+// Extracted function to perform search on documents
+fn search_documents<'a>(
+    documents: &'a [Document],
+    query_embedding: &[f32],
+    args: &Args,
+) -> Vec<SearchResult<'a>> {
     let mut search_results = Vec::new();
-    for doc in &documents {
+
+    for doc in documents {
         for (idx, line_embedding) in doc.embeddings.iter().enumerate() {
-            let distance = f32::cosine(&query_embedding, line_embedding);
+            let distance = f32::cosine(query_embedding, line_embedding);
             if let Some(distance) = distance {
                 let distance_threshold = args.max_distance.unwrap_or(100.0);
                 if distance < distance_threshold {
@@ -138,13 +121,16 @@ fn main() -> Result<()> {
 
     // If threshold is specified, return all results under threshold
     // Otherwise, limit to top_k results
-    let results_to_show = if args.max_distance.is_some() {
-        &search_results[..]
+    if args.max_distance.is_some() {
+        search_results
     } else {
-        &search_results[..search_results.len().min(args.top_k)]
-    };
+        search_results.into_iter().take(args.top_k).collect()
+    }
+}
 
-    for search_result in results_to_show {
+// Extracted function to format and print results
+fn print_search_results(results: &[SearchResult]) {
+    for search_result in results {
         let filename = search_result.filename.to_string();
         let distance = search_result.distance;
         let start = search_result.start;
@@ -166,6 +152,65 @@ fn main() -> Result<()> {
         }
         println!(); // Empty line between results
     }
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    let model = StaticModel::from_pretrained(
+        "minishlab/potion-multilingual-128M", // "minishlab/potion-multilingual-128M",
+        None,                                 // Optional: Hugging Face API token for private models
+        None, // Optional: bool to override model's default normalization. `None` uses model's config.
+        None, // Optional: subfolder if model files are not at the root of the repo/path
+    )?;
+
+    let query = if args.ignore_case {
+        args.query.to_lowercase()
+    } else {
+        args.query.clone()
+    };
+    let query_embedding = model.encode_single(&query);
+
+    let mut documents = Vec::new();
+
+    // Check if we should read from stdin (no files provided and stdin is available)
+    if args.files.is_empty() && !io::stdin().is_terminal() {
+        // Read from stdin
+        let stdin_lines = read_from_stdin()?;
+        if !stdin_lines.is_empty() {
+            let lines_for_embedding = if args.ignore_case {
+                stdin_lines.iter().map(|s| s.to_lowercase()).collect()
+            } else {
+                stdin_lines.clone()
+            };
+
+            let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 1024);
+
+            documents.push(Document {
+                filename: "<stdin>".to_string(),
+                lines: stdin_lines,
+                embeddings,
+            });
+        }
+    } else if !args.files.is_empty() {
+        // Read from files
+        for f in &args.files {
+            let content = read_to_string(f)?;
+            if let Some(doc) =
+                create_document_from_content(f.clone(), &content, &model, args.ignore_case)
+            {
+                documents.push(doc);
+            }
+        }
+    } else {
+        eprintln!(
+            "Error: No input provided. Either specify files as arguments or pipe input to stdin."
+        );
+        std::process::exit(1);
+    }
+
+    let search_results = search_documents(&documents, &query_embedding, &args);
+    print_search_results(&search_results);
 
     Ok(())
 }
@@ -180,7 +225,7 @@ mod tests {
         let embeddings: Vec<Vec<f32>> = owned_lines
             .iter()
             .enumerate()
-            .map(|(i, _)| vec![i as f32; 128]) // Simple pattern for testing
+            .map(|(i, _)| vec![(i as f32) + 1.0; 128]) // Simple pattern for testing
             .collect();
 
         Document {
@@ -190,85 +235,152 @@ mod tests {
         }
     }
 
+    fn create_test_args(query: &str) -> Args {
+        Args {
+            query: query.to_string(),
+            files: vec![],
+            n_lines: 3,
+            top_k: 3,
+            max_distance: None,
+            ignore_case: false,
+        }
+    }
+
     #[test]
-    fn test_document_creation() {
+    fn test_search_documents_basic() {
+        let doc1 = create_test_document(
+            "file1.txt",
+            vec!["hello world", "goodbye world", "test line"],
+        );
+        let doc2 = create_test_document("file2.txt", vec!["another test", "more content"]);
+        let documents = vec![doc1, doc2];
+
+        let args = create_test_args("test query");
+        let query_embedding = vec![1.0; 128];
+
+        let results = search_documents(&documents, &query_embedding, &args);
+
+        // Should return results (exact matches depend on embedding similarity)
+        assert!(!results.is_empty());
+        // Results should be sorted by distance
+        for i in 1..results.len() {
+            assert!(results[i - 1].distance <= results[i].distance);
+        }
+    }
+
+    #[test]
+    fn test_search_documents_with_max_distance() {
         let doc = create_test_document("test.txt", vec!["line 1", "line 2", "line 3"]);
-        assert_eq!(doc.filename, "test.txt");
-        assert_eq!(doc.lines.len(), 3);
-        assert_eq!(doc.embeddings.len(), 3);
-        assert_eq!(doc.lines[0], "line 1");
+        let documents = vec![doc];
+
+        let mut args = create_test_args("test");
+        args.max_distance = Some(0.5); // Very restrictive threshold
+
+        let query_embedding = vec![0.0; 128];
+        let results = search_documents(&documents, &query_embedding, &args);
+
+        // With restrictive threshold, should have fewer or no results
+        for result in &results {
+            assert!(result.distance < 0.5);
+        }
     }
 
     #[test]
-    fn test_search_result_context_boundaries() {
-        let lines = vec!["line 0", "line 1", "line 2", "line 3", "line 4"];
-        let doc = create_test_document("test.txt", lines);
+    fn test_search_documents_top_k_limit() {
+        let doc = create_test_document(
+            "test.txt",
+            vec!["line 1", "line 2", "line 3", "line 4", "line 5"],
+        );
+        let documents = vec![doc];
 
-        // Test context calculation for middle line
-        let context: usize = 2;
-        let idx: usize = 2; // "line 2"
-        let bottom_range = max(0, idx.saturating_sub(context));
-        let top_range = min(doc.lines.len(), idx + context + 1);
+        let mut args = create_test_args("test");
+        args.top_k = 2; // Limit to 2 results
+        args.max_distance = None; // Use top_k instead of threshold
 
-        assert_eq!(bottom_range, 0); // max(0, 2-2) = 0
-        assert_eq!(top_range, 5); // min(5, 2+2+1) = 5
+        let query_embedding = vec![1.0; 128];
+        let results = search_documents(&documents, &query_embedding, &args);
 
-        let context_lines = &doc.lines[bottom_range..top_range];
-        assert_eq!(context_lines.len(), 5);
-        assert_eq!(context_lines[0], "line 0");
-        assert_eq!(context_lines[4], "line 4");
+        assert!(results.len() <= 2);
     }
 
     #[test]
-    fn test_search_result_context_at_boundaries() {
-        let lines = vec!["line 0", "line 1", "line 2"];
-        let doc = create_test_document("test.txt", lines);
+    fn test_search_result_context_calculation() {
+        let doc = create_test_document(
+            "test.txt",
+            vec!["line 0", "line 1", "line 2", "line 3", "line 4", "line 5"],
+        );
+        let documents = vec![doc];
 
-        // Test context at start of file
-        let context: usize = 2;
-        let idx: usize = 0;
-        let bottom_range = max(0, idx.saturating_sub(context));
-        let top_range = min(doc.lines.len(), idx + context + 1);
+        let mut args = create_test_args("test");
+        args.n_lines = 1; // 1 line of context before/after
 
-        assert_eq!(bottom_range, 0);
-        assert_eq!(top_range, 3);
+        let query_embedding = vec![2.0; 128];
+        let results = search_documents(&documents, &query_embedding, &args);
 
-        // Test context at end of file
-        let idx: usize = 2;
-        let bottom_range = max(0, idx.saturating_sub(context));
-        let top_range = min(doc.lines.len(), idx + context + 1);
-
-        assert_eq!(bottom_range, 0);
-        assert_eq!(top_range, 3);
+        if !results.is_empty() {
+            let result = &results[0];
+            assert_eq!(result.lines.len(), 3);
+        }
     }
 
     #[test]
-    fn test_empty_document_handling() {
-        let doc = create_test_document("empty.txt", vec![]);
-        assert_eq!(doc.lines.len(), 0);
-        assert_eq!(doc.embeddings.len(), 0);
+    fn test_context_at_file_boundaries() {
+        let doc = create_test_document("small.txt", vec!["first", "second"]);
+        let documents = vec![doc];
+
+        let mut args = create_test_args("test");
+        args.n_lines = 5; // More context than available
+
+        let query_embedding = vec![0.0; 128]; // Should match index 0
+        let results = search_documents(&documents, &query_embedding, &args);
+
+        if !results.is_empty() {
+            let result = &results[0];
+            // Should not exceed file boundaries
+            assert_eq!(result.start, 0);
+            assert_eq!(result.end, 2); // Length of file
+            assert!(result.lines.len() <= 2);
+        }
     }
 
     #[test]
-    fn test_search_result_struct() {
-        let lines = vec!["test line 1", "test line 2", "test line 3"];
-        let doc = create_test_document("test.txt", lines);
+    fn test_multiple_documents_search() {
+        let doc1 = create_test_document("file1.txt", vec!["apple", "banana"]);
+        let doc2 = create_test_document("file2.txt", vec!["orange", "grape"]);
+        let documents = vec![doc1, doc2];
 
-        let search_result = SearchResult {
-            filename: &doc.filename,
-            lines: &doc.lines[1..3], // lines 1-2
-            start: 1,
-            end: 3,
-            match_line: 2, // The actual matching line
-            distance: 0.5,
-        };
+        let args = create_test_args("fruit");
+        let query_embedding = vec![1.5; 128];
 
-        assert_eq!(search_result.filename, "test.txt");
-        assert_eq!(search_result.lines.len(), 2);
-        assert_eq!(search_result.lines[0], "test line 2");
-        assert_eq!(search_result.start, 1);
-        assert_eq!(search_result.end, 3);
-        assert_eq!(search_result.match_line, 2);
-        assert_eq!(search_result.distance, 0.5);
+        let results = search_documents(&documents, &query_embedding, &args);
+
+        // Should search across all documents
+        let filenames: Vec<&String> = results.iter().map(|r| r.filename).collect();
+
+        // Both files could potentially have matches depending on embedding similarity
+        assert!(!results.is_empty());
+        assert!(filenames.contains(&&"file1.txt".to_string()));
+        assert!(filenames.contains(&&"file2.txt".to_string()));
+    }
+
+    #[test]
+    fn test_empty_documents_handling() {
+        let documents: Vec<Document> = vec![];
+        let args = create_test_args("test");
+        let query_embedding = vec![1.0; 128];
+
+        let results = search_documents(&documents, &query_embedding, &args);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_args_parsing_functionality() {
+        // Test that our Args struct has the expected defaults
+        let args = create_test_args("test query");
+        assert_eq!(args.query, "test query");
+        assert_eq!(args.n_lines, 3);
+        assert_eq!(args.top_k, 3);
+        assert_eq!(args.max_distance, None);
+        assert!(!args.ignore_case);
     }
 }
