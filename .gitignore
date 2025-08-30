@@ -1,2 +1,4 @@
 target
 .idea
+.claude/
+.lmstudio_parse_config.json

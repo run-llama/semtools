@@ -4,14 +4,20 @@
 
 A collection of high-performance CLI tools for document processing and semantic search, built with Rust for speed and reliability.
 
-- **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
+- **`parse`** - Parse documents (PDF, DOCX, etc.) using various backends (LlamaParse API or local LMStudio) into markdown format
 - **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
 
-**NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` remains local-only.
+**NOTE:** `parse` supports two backends:
+- **LlamaParse** (default): Cloud API backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai)
+- **LMStudio**: Local backend using LMStudio for private, offline document parsing
+
+`search` remains local-only.
 
 ## Key Features
 
 - **Fast semantic search** using model2vec embeddings, without the burden of a vector database
+- **Multiple parsing backends**: Choose between cloud (LlamaParse) and local (LMStudio) processing
+- **Private document parsing**: LMStudio backend keeps your documents completely local
 - **Reliable document parsing** with caching and error handling  
 - **Unix-friendly** design with proper stdin/stdout handling
 - **Configurable** distance thresholds and returned chunk sizes
@@ -23,7 +29,8 @@ A collection of high-performance CLI tools for document processing and semantic 
 Prerequisites:
 
 - [Rust + Cargo](https://www.rust-lang.org/tools/install)
-- For the `parse` tool: LlamaIndex Cloud API key
+- For the `parse` tool with LlamaParse backend: LlamaIndex Cloud API key
+- For the `parse` tool with LMStudio backend: [LMStudio](https://lmstudio.ai) with a loaded model
 
 Install:
 
@@ -41,30 +48,37 @@ cargo install semtools --no-default-features --features=search
 Basic Usage:
 
 ```bash
-# Parse some files
+# Parse some files (default: LlamaParse backend)
 parse my_dir/*.pdf
+
+# Parse with LMStudio backend (local)
+parse my_dir/*.pdf --backend lmstudio
 
 # Search some (text-based) files
 search "some keywords" *.txt --max-distance 0.3 --n-lines 5
 
 # Combine parsing and search
-parse my_docs/*.pdf | xargs -n 1 search "API endpoints"
+parse my_docs/*.pdf --backend lmstudio | xargs -n 1 search "API endpoints"
 ```
 
 Advanced Usage:
 
 ```bash
 # Combine with grep for exact-match pre-filtering and distance thresholding
-parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
+parse *.pdf --backend lmstudio | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
 
 # Pipeline with content search (note the 'cat')
-find . -name "*.md" | xargs parse | xargs -n 1 search "installation"
+find . -name "*.md" | xargs parse --backend lmstudio | xargs -n 1 search "installation"
 
 # Combine with grep for filtering (grep could be before or after parse/search!)
-parse docs/*.pdf | xargs -n 1 search "API" | grep -A5 "authentication"
+parse docs/*.pdf --backend lmstudio | xargs -n 1 search "API" | grep -A5 "authentication"
 
 # Save search results
-parse report.pdf | xargs cat | search "summary" > results.txt
+parse report.pdf --backend lmstudio | xargs cat | search "summary" > results.txt
+
+# Use different backends for different use cases
+parse sensitive_docs/*.pdf --backend lmstudio  # Keep data local
+parse public_docs/*.pdf --backend llama-parse  # Use cloud processing
 ```
 
 ## CLI Help
@@ -108,6 +122,10 @@ Options:
 
 ### Parse Tool Configuration
 
+The `parse` tool supports two backends with different configuration requirements:
+
+#### LlamaParse Backend (Default)
+
 By default, the `parse` tool uses the LlamaParse API to parse documents.
 
 It will look for a `~/.parse_config.json` file to configure the API key and other parameters.
@@ -142,6 +160,59 @@ Or just set via environment variable:
 export LLAMA_CLOUD_API_KEY="your_api_key_here"
 ```
 
+#### LMStudio Backend
+
+The LMStudio backend requires a running LMStudio server with a loaded model.
+
+**Setup:**
+1. Download and install [LMStudio](https://lmstudio.ai)
+2. Load a model (e.g., Llama, Mistral, Phi, etc.)
+3. Start the local server (default port: 1234)
+
+The backend will look for a `~/.lmstudio_parse_config.json` file with the following options:
+
+```json
+{
+  "base_url": "http://localhost:1234/v1",
+  "model": "llama-3.2-3b-instruct",
+  "temperature": 0.3,
+  "max_tokens": 4096,
+  "chunk_size": 3000,
+  "chunk_overlap": 200,
+  "max_retries": 3,
+  "retry_delay_ms": 1000,
+  "num_ongoing_requests": 5
+}
+```
+
+**Configuration Options:**
+- `base_url`: LMStudio API endpoint (default: http://localhost:1234/v1)
+- `model`: Model name as shown in LMStudio (get with `curl http://localhost:1234/v1/models`)
+- `temperature`: Creativity level 0.0-1.0 (lower = more consistent)
+- `max_tokens`: Maximum tokens per response
+- `chunk_size`: Max characters per chunk for large documents  
+- `chunk_overlap`: Overlap between chunks for context continuity
+- `max_retries`: Retry attempts for failed requests
+- `retry_delay_ms`: Delay between retries
+- `num_ongoing_requests`: Number of concurrent processing tasks
+
+**Environment Variable Support:**
+
+You can also configure LMStudio backend via environment variables:
+```bash
+export LMSTUDIO_BASE_URL="http://localhost:1234/v1"
+export LMSTUDIO_MODEL="your-model-name"
+```
+
+**Smart Config Loading:**
+
+The LMStudio backend uses intelligent config loading:
+1. Tries `~/.lmstudio_parse_config.json` (or your specified path)
+2. Falls back to `~/.lmstudio_config.json`, `~/.lmstudio.json`
+3. Falls back to general `~/.parse_config.json`
+4. Uses environment variables if set
+5. Uses built-in defaults as final fallback
+
 ## Agent Use Case Examples
 
 - [Using Semtools with Coding Agents](examples/use_with_coding_agents.md)
@@ -149,8 +220,10 @@ export LLAMA_CLOUD_API_KEY="your_api_key_here"
 
 ## Future Work
 
-- [ ] More parsing backends (something local-only would be great!)
+- [x] ~~More parsing backends (something local-only would be great!)~~ ✅ Added LMStudio backend
+- [ ] Additional local parsing backends (Ollama, raw transformers)
 - [ ] Allowing model selection for the search tool
+- [ ] Support for more document formats in local backends
 
 ## Contributing
 

@@ -4,4 +4,6 @@
 pub mod parse;
 
 #[cfg(feature = "parse")]
-pub use parse::{JobError, LlamaParseBackend, LlamaParseConfig};
+pub use parse::{
+    JobError, LMStudioBackend, LMStudioConfig, LlamaParseBackend, LlamaParseConfig, ParseBackend,
+};

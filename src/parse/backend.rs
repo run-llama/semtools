@@ -1,7 +1,10 @@
+use async_trait::async_trait;
+use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+use crate::parse::backend_trait::ParseBackend;
 use crate::parse::cache::CacheManager;
 use crate::parse::client::ParseClient;
 use crate::parse::config::LlamaParseConfig;
@@ -28,7 +31,7 @@ impl LlamaParseBackend {
         })
     }
 
-    pub async fn parse(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
+    async fn parse_internal(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
         let semaphore = Arc::new(Semaphore::new(self.config.num_ongoing_requests));
 
         let base_url = self
@@ -129,5 +132,29 @@ impl LlamaParseBackend {
         cache_manager
             .write_results_to_disk(&file_path, &markdown_content)
             .await
+    }
+}
+
+#[async_trait]
+impl ParseBackend for LlamaParseBackend {
+    async fn parse(&self, files: Vec<String>) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+        match self.parse_internal(files).await {
+            Ok(results) => Ok(results),
+            Err(e) => Err(Box::new(e) as Box<dyn Error + Send + Sync>),
+        }
+    }
+
+    fn name(&self) -> &str {
+        "llama-parse"
+    }
+
+    fn verbose(&self) -> bool {
+        self.verbose
+    }
+}
+
+impl LlamaParseBackend {
+    pub async fn parse_files(&self, files: Vec<String>) -> Result<Vec<String>, JobError> {
+        self.parse_internal(files).await
     }
 }
