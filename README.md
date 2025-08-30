@@ -163,5 +163,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [LlamaIndex/LlamaParse](https://cloud.llamaindex.ai/) for document parsing capabilities
-- [model2vec](https://github.com/MinishLab/model2vec) for fast embedding generation
+- [model2vec-rs](https://github.com/MinishLab/model2vec-rs)for fast embedding generation
 - [simsimd](https://github.com/ashvardanian/simsimd) for efficient similarity computation 
