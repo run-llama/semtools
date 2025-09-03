@@ -75,7 +75,7 @@ fn create_document_from_content(
         owned_lines.clone()
     };
 
-    let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 1024);
+    let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 16384);
     Some(Document {
         filename,
         lines: owned_lines,
@@ -184,7 +184,7 @@ fn main() -> Result<()> {
                 stdin_lines.clone()
             };
 
-            let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 1024);
+            let embeddings = model.encode_with_args(&lines_for_embedding, Some(2048), 16384);
 
             documents.push(Document {
                 filename: "<stdin>".to_string(),
