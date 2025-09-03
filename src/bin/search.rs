@@ -161,7 +161,7 @@ fn main() -> Result<()> {
 
     let model = StaticModel::from_pretrained(
         MODEL_NAME, // "minishlab/potion-multilingual-128M",
-        None,                                 // Optional: Hugging Face API token for private models
+        None,       // Optional: Hugging Face API token for private models
         None, // Optional: bool to override model's default normalization. `None` uses model's config.
         None, // Optional: subfolder if model files are not at the root of the repo/path
     )?;
@@ -227,12 +227,8 @@ mod tests {
 
     fn get_model() -> &'static StaticModel {
         MODEL.get_or_init(|| {
-            StaticModel::from_pretrained(
-                MODEL_NAME,
-                None,
-                None,
-                None,
-            ).expect("Failed to load model for tests")
+            StaticModel::from_pretrained(MODEL_NAME, None, None, None)
+                .expect("Failed to load model for tests")
         })
     }
 
@@ -261,7 +257,8 @@ mod tests {
             "file1.txt",
             vec!["hello world", "goodbye world", "test line"],
         );
-        let doc2 = create_test_document_with_model("file2.txt", vec!["another test", "more content"]);
+        let doc2 =
+            create_test_document_with_model("file2.txt", vec!["another test", "more content"]);
         let documents = vec![doc1, doc2];
 
         let args = create_test_args("test query");
@@ -402,22 +399,22 @@ mod tests {
     #[test]
     fn test_case_insensitive_search() {
         let model = get_model();
-        
+
         let doc = create_test_document_with_model(
             "mixed_case.txt",
-            vec!["Hello World", "GOODBYE WORLD", "Test Line"]
+            vec!["Hello World", "GOODBYE WORLD", "Test Line"],
         );
         let documents = vec![doc];
 
         let mut args = create_test_args("hello world");
         args.ignore_case = true;
-        
+
         // For case-insensitive, we need to process both query and content
         let query = args.query.to_lowercase();
         let query_embedding = model.encode_single(&query);
 
         let results = search_documents(&documents, &query_embedding, &args);
-        
+
         // Should find matches despite case differences
         assert!(!results.is_empty());
     }
