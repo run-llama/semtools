@@ -6,6 +6,8 @@ use std::cmp::{max, min};
 use std::fs::read_to_string;
 use std::io::{self, BufRead, IsTerminal};
 
+const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
+
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
 struct Args {
@@ -158,7 +160,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let model = StaticModel::from_pretrained(
-        "minishlab/potion-multilingual-128M", // "minishlab/potion-multilingual-128M",
+        MODEL_NAME, // "minishlab/potion-multilingual-128M",
         None,                                 // Optional: Hugging Face API token for private models
         None, // Optional: bool to override model's default normalization. `None` uses model's config.
         None, // Optional: subfolder if model files are not at the root of the repo/path
@@ -218,21 +220,27 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::OnceLock;
 
-    fn create_test_document(filename: &str, lines: Vec<&str>) -> Document {
-        let owned_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-        // Create dummy embeddings for testing (in real usage, these come from the model)
-        let embeddings: Vec<Vec<f32>> = owned_lines
-            .iter()
-            .enumerate()
-            .map(|(i, _)| vec![(i as f32) + 1.0; 128]) // Simple pattern for testing
-            .collect();
+    // Global model instance shared across all tests
+    static MODEL: OnceLock<StaticModel> = OnceLock::new();
 
-        Document {
-            filename: filename.to_string(),
-            lines: owned_lines,
-            embeddings,
-        }
+    fn get_model() -> &'static StaticModel {
+        MODEL.get_or_init(|| {
+            StaticModel::from_pretrained(
+                MODEL_NAME,
+                None,
+                None,
+                None,
+            ).expect("Failed to load model for tests")
+        })
+    }
+
+    fn create_test_document_with_model(filename: &str, lines: Vec<&str>) -> Document {
+        let model = get_model();
+        let content = lines.join("\n");
+        create_document_from_content(filename.to_string(), &content, model, false)
+            .expect("Failed to create test document")
     }
 
     fn create_test_args(query: &str) -> Args {
@@ -248,15 +256,16 @@ mod tests {
 
     #[test]
     fn test_search_documents_basic() {
-        let doc1 = create_test_document(
+        let model = get_model();
+        let doc1 = create_test_document_with_model(
             "file1.txt",
             vec!["hello world", "goodbye world", "test line"],
         );
-        let doc2 = create_test_document("file2.txt", vec!["another test", "more content"]);
+        let doc2 = create_test_document_with_model("file2.txt", vec!["another test", "more content"]);
         let documents = vec![doc1, doc2];
 
         let args = create_test_args("test query");
-        let query_embedding = vec![1.0; 128];
+        let query_embedding = model.encode_single(&args.query);
 
         let results = search_documents(&documents, &query_embedding, &args);
 
@@ -270,13 +279,14 @@ mod tests {
 
     #[test]
     fn test_search_documents_with_max_distance() {
-        let doc = create_test_document("test.txt", vec!["line 1", "line 2", "line 3"]);
+        let model = get_model();
+        let doc = create_test_document_with_model("test.txt", vec!["line 1", "line 2", "line 3"]);
         let documents = vec![doc];
 
         let mut args = create_test_args("test");
         args.max_distance = Some(0.5); // Very restrictive threshold
 
-        let query_embedding = vec![0.0; 128];
+        let query_embedding = model.encode_single(&args.query);
         let results = search_documents(&documents, &query_embedding, &args);
 
         // With restrictive threshold, should have fewer or no results
@@ -287,7 +297,8 @@ mod tests {
 
     #[test]
     fn test_search_documents_top_k_limit() {
-        let doc = create_test_document(
+        let model = get_model();
+        let doc = create_test_document_with_model(
             "test.txt",
             vec!["line 1", "line 2", "line 3", "line 4", "line 5"],
         );
@@ -297,7 +308,7 @@ mod tests {
         args.top_k = 2; // Limit to 2 results
         args.max_distance = None; // Use top_k instead of threshold
 
-        let query_embedding = vec![1.0; 128];
+        let query_embedding = model.encode_single(&args.query);
         let results = search_documents(&documents, &query_embedding, &args);
 
         assert!(results.len() <= 2);
@@ -305,7 +316,8 @@ mod tests {
 
     #[test]
     fn test_search_result_context_calculation() {
-        let doc = create_test_document(
+        let model = get_model();
+        let doc = create_test_document_with_model(
             "test.txt",
             vec!["line 0", "line 1", "line 2", "line 3", "line 4", "line 5"],
         );
@@ -314,7 +326,7 @@ mod tests {
         let mut args = create_test_args("test");
         args.n_lines = 1; // 1 line of context before/after
 
-        let query_embedding = vec![2.0; 128];
+        let query_embedding = model.encode_single(&args.query);
         let results = search_documents(&documents, &query_embedding, &args);
 
         if !results.is_empty() {
@@ -325,13 +337,14 @@ mod tests {
 
     #[test]
     fn test_context_at_file_boundaries() {
-        let doc = create_test_document("small.txt", vec!["first", "second"]);
+        let model = get_model();
+        let doc = create_test_document_with_model("small.txt", vec!["first", "second"]);
         let documents = vec![doc];
 
-        let mut args = create_test_args("test");
+        let mut args = create_test_args("first"); // Query that should match the first line
         args.n_lines = 5; // More context than available
 
-        let query_embedding = vec![0.0; 128]; // Should match index 0
+        let query_embedding = model.encode_single(&args.query);
         let results = search_documents(&documents, &query_embedding, &args);
 
         if !results.is_empty() {
@@ -345,19 +358,20 @@ mod tests {
 
     #[test]
     fn test_multiple_documents_search() {
-        let doc1 = create_test_document("file1.txt", vec!["apple", "banana"]);
-        let doc2 = create_test_document("file2.txt", vec!["orange", "grape"]);
+        let model = get_model();
+        let doc1 = create_test_document_with_model("file1.txt", vec!["apple", "banana"]);
+        let doc2 = create_test_document_with_model("file2.txt", vec!["orange", "grape"]);
         let documents = vec![doc1, doc2];
 
         let args = create_test_args("fruit");
-        let query_embedding = vec![1.5; 128];
+        let query_embedding = model.encode_single(&args.query);
 
         let results = search_documents(&documents, &query_embedding, &args);
 
         // Should search across all documents
         let filenames: Vec<&String> = results.iter().map(|r| r.filename).collect();
 
-        // Both files could potentially have matches depending on embedding similarity
+        // Both files should have matches
         assert!(!results.is_empty());
         assert!(filenames.contains(&&"file1.txt".to_string()));
         assert!(filenames.contains(&&"file2.txt".to_string()));
@@ -365,9 +379,10 @@ mod tests {
 
     #[test]
     fn test_empty_documents_handling() {
+        let model = get_model();
         let documents: Vec<Document> = vec![];
         let args = create_test_args("test");
-        let query_embedding = vec![1.0; 128];
+        let query_embedding = model.encode_single(&args.query);
 
         let results = search_documents(&documents, &query_embedding, &args);
         assert!(results.is_empty());
@@ -382,5 +397,28 @@ mod tests {
         assert_eq!(args.top_k, 3);
         assert_eq!(args.max_distance, None);
         assert!(!args.ignore_case);
+    }
+
+    #[test]
+    fn test_case_insensitive_search() {
+        let model = get_model();
+        
+        let doc = create_test_document_with_model(
+            "mixed_case.txt",
+            vec!["Hello World", "GOODBYE WORLD", "Test Line"]
+        );
+        let documents = vec![doc];
+
+        let mut args = create_test_args("hello world");
+        args.ignore_case = true;
+        
+        // For case-insensitive, we need to process both query and content
+        let query = args.query.to_lowercase();
+        let query_embedding = model.encode_single(&query);
+
+        let results = search_documents(&documents, &query_embedding, &args);
+        
+        // Should find matches despite case differences
+        assert!(!results.is_empty());
     }
 }
