@@ -1,0 +1,560 @@
+2. "Find when at least one specific technical term first appeared in paper titles" (exact temporal tracking)
+
+With `search`:
+```bash
+> Find when at least one specific technical term first appeared in paper 
+  titles
+
+⏺ I'll help you find when specific technical terms first appeared in paper
+  titles. Let me create a todo list to track this task and then search through
+   the dataset.
+
+⏺ Update Todos
+  ⎿  ☐ Explore the dataset structure to understand available papers 
+     ☐ Search for technical terms in paper titles across the dataset
+     ☐ Analyze chronological appearance of terms
+
+⏺ Update Todos
+  ⎿  ☐ Explore the dataset structure to understand available papers 
+     ☐ Search for technical terms in paper titles across the dataset
+     ☐ Analyze chronological appearance of terms
+
+⏺ List(~/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers)
+  ⎿  Listed 1371 paths (ctrl+r to expand)
+
+⏺ Now let me look at a sample paper to understand the structure and then begin
+   searching for technical terms in titles.
+
+⏺ Read(full_text/2505.20277v2.txt)
+  ⎿  Read 20 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand available papers 
+     ☐ Search for technical terms in paper titles across the dataset
+     ☐ Analyze chronological appearance of terms
+
+⏺ I can see the structure. Each paper has a TITLE line. Let me extract all
+  titles and their dates from the dataset to find when technical terms first
+  appeared.
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | head -20)
+  ⎿  full_text/2505.20277v2.txt:TITLE: OmniCharacter:                         
+     full_text/2505.20278v1.txt:TITLE: The Coverage Principle: A Framework for
+     Understanding Compositional Generalization
+     … +31 lines (ctrl+r to expand)
+
+⏺ Perfect! I can extract titles and dates. Let me create a comprehensive
+  script to analyze when specific technical terms first appeared.
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | sort -n |
+      head -20)
+  ⎿ 2505: A ZeNN architecture to avoid the Gaussian trap                      
+    2505: Active Learning for Multiple Change Point Detection in Non-stationar
+    y Time Series with Deep Gaussian Processes
+    … +29 lines (ctrl+r to expand)
+
+
+⏺ Good! Now let me search for some specific technical terms to see their
+  chronological appearance. I'll analyze key AI/ML terms like "Transformer",
+  "Attention", "Neural", "Deep Learning", "GAN", "BERT", "GPT", etc.
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i
+      "transformer" | sort -n)
+  ⎿  2505: CardioPatternFormer: Pattern-Guided Attention for Interpretable ECG
+     Classification with Transformer Architecture
+     2506: Attention on flow control: transformer-based reinforcement learning
+     … +36 lines (ctrl+r to expand)
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i
+      "attention" | sort -n | head -10)
+  ⎿ 2505: BlastOFormer: Attention and Neural Operator Deep Learning Methods fo
+    r Explosive Blast Prediction
+    2505: CardioPatternFormer: Pattern-Guided Attention for Interpretable ECG
+    … +17 lines (ctrl+r to expand)
+
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i
+      "neural" | sort -n | head -15)
+  ⎿ 2505: BlastOFormer: Attention and Neural Operator Deep Learning Methods fo
+    r Explosive Blast Prediction
+    2505: Semi-Explicit Neural DAEs: Learning Long-Horizon Dynamical Systems w
+    … +23 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i -E
+       "(GAN|GPT|BERT)" | sort -n)
+  ⎿ 2506: Identifying a Circuit for Verb Conjugation in GPT‑2                 
+    2507: AI-Enhanced Pediatric Pneumonia Detection: A CNN-Based Approach Usin
+    g Data Augmentation and Generative Adversarial Networks (GANs)
+    … +18 lines (ctrl+r to expand)
+
+
+⏺ Let me search for more terms and create a comprehensive analysis:
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i
+      "diffusion" | sort -n)
+  ⎿ 2505: DiSA: Diffusion Step Annealing in Autoregressive Image Generation   
+    2506: DiffSoundStream: Efficient Speech Tokenization via Diffusion Decodin
+    g
+    … +45 lines (ctrl+r to expand)
+
+
+⏺ Bash(grep "^TITLE:" full_text/*.txt | sed
+      's/full_text\/\([0-9]*\)\.[0-9]*v[0-9]*\.txt:TITLE: /\1: /' | grep -i -E
+       "(LLM|language model)" | sort -n | head -15)
+  ⎿ 2505: Beyond Keywords: Evaluating Large Language Model Classification of N
+    uanced Ableism
+    2505: Beyond Markovian: Reflective Exploration via Bayes-Adaptive RL for L
+    … +20 lines (ctrl+r to expand)
+
+
+
+⏺ Now let me create a comprehensive analysis script to find the earliest
+  appearance of key technical terms:
+
+⏺ Write(analyze_terms.py)
+  ⎿  Wrote 136 lines to analyze_terms.py                                      
+     #!/usr/bin/env python3
+     """
+     Analyze when specific technical terms first appeared in ArXiv paper 
+     titles.
+     """
+     import os
+     import re
+     from collections import defaultdict
+     def extract_titles_and_dates():
+     … +126 lines (ctrl+r to expand)
+
+⏺ Bash(python analyze_terms.py)
+  ⎿  Extracting titles and dates from dataset...
+     Found 1000 papers
+     … +202 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand available papers 
+     ☒ Search for technical terms in paper titles across the dataset
+     ☐ Analyze chronological appearance of terms
+
+⏺ Perfect! Let me also create a more detailed analysis showing some
+  interesting patterns and provide additional context with the search command:
+
+⏺ Bash(search "first transformer paper" full_text/*.txt --top-k 3 --n-lines 5)
+  ⎿  full_text/2506.22084v1.txt:598::609 (0.26224713885649803)                
+      599:
+      600: C. Raffel, N. Shazeer, A. Roberts, K. Lee, S. Narang, M. Matena, Y.
+     … +41 lines (ctrl+r to expand)
+
+⏺ Let me now create a final comprehensive summary report:
+
+⏺ Write(term_analysis_report.md)
+  ⎿  Wrote 85 lines to term_analysis_report.md                         
+     # Technical Term First Appearances in ArXiv Paper Titles
+     ## Dataset Overview
+     - **Total Papers Analyzed**: 1,000
+     - **Date Range**: 2505-2508 (May 2025 - August 2025)
+     - **Organization**: Papers organized by date, author, and category
+     ## Key Findings
+     ### Terms First Appearing in 2505 (May 2025)
+     … +75 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand available papers 
+     ☒ Search for technical terms in paper titles across the dataset
+     ☒ Analyze chronological appearance of terms
+
+⏺ Analysis Complete
+
+  I found when specific technical terms first appeared in the ArXiv paper
+  titles from your 1,000-paper dataset:
+
+  Key Findings:
+
+  2505 (May 2025) - Most terms first appeared:
+  - LLM (42 occurrences) - "Towards Fully FP8 GEMM LLM Training at Scale"
+  - Neural (45 occurrences) - "Stochastic Preconditioning for Neural Field
+  Optimization"
+  - Transformer (13 occurrences) - "CardioPatternFormer: Pattern-Guided
+  Attention..."
+  - Diffusion (30 occurrences) - "DiSA: Diffusion Step Annealing..."
+  - Attention (15 occurrences) - Same transformer paper
+  - Multimodal (38 occurrences) - "Project Riley: Multimodal Multi-Agent
+  LLM..."
+
+  2506 (June 2025) - Traditional ML terms appeared:
+  - Reinforcement Learning (26 occurrences)
+  - Machine Learning (12 occurrences)
+  - CNN, RNN, LSTM - Classic architectures
+  - GPT (4 occurrences) - "Identifying a Circuit for Verb Conjugation in
+  GPT‑2"
+
+  Later appearances:
+  - Few-shot - 2507 (1 occurrence)
+  - GAN - 2508 (1 occurrence)
+
+  The dataset shows modern AI terms dominated early (May 2025), while
+  traditional ML terms appeared later, suggesting this captures a period when
+  transformer-based models were central to AI research.
+
+  Files created:
+  - analyze_terms.py - Analysis script
+  - term_analysis_report.md - Detailed report
+
+
+Total cost:            $0.4475
+Total duration (API):  2m 55.3s
+Total code changes:    221 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  11.5k input, 1.5k output, 0 cache read, 0 cache write
+       claude-sonnet:  60 input, 5.7k output, 707.6k cache read, 35.8k cache write
+```
+
+Without `search`:
+```bash
+> Find when at least one specific technical term first appeared in paper 
+  titles
+
+⏺ I'll search for when specific technical terms first appeared in paper titles
+   in this ArXiv dataset. Let me start by exploring the dataset structure and
+  then analyze the papers by date to find the earliest appearances of various
+  technical terms.
+
+⏺ Update Todos
+  ⎿  ☐ Explore dataset structure to understand organization     
+     ☐ Identify common technical terms from paper titles
+     ☐ Search chronologically for first appearances of key terms
+     ☐ Report findings with earliest dates for each term
+
+⏺ Update Todos
+  ⎿  ☐ Explore dataset structure to understand organization     
+     ☐ Identify common technical terms from paper titles
+     ☐ Search chronologically for first appearances of key terms
+     ☐ Report findings with earliest dates for each term
+
+⏺ List(~/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers)
+  ⎿  Listed 1371 paths (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand organization     
+     ☐ Identify common technical terms from paper titles
+     ☐ Search chronologically for first appearances of key terms
+     ☐ Report findings with earliest dates for each term
+
+⏺ Let me examine the by_date directory to understand the chronological
+  organization and then extract titles to identify technical terms.
+
+⏺ List(by_date)
+  ⎿  Listed 982 paths (ctrl+r to expand)
+
+⏺ Now I need to extract titles from papers to identify key technical terms.
+  Let me start by reading a few sample papers to understand the format and
+  then use a systematic approach to extract all titles chronologically.
+
+⏺ Read(by_date/2025-05/2505.20277v2_fulltext.txt)
+  ⎿  Read 10 lines (ctrl+r to expand)
+
+⏺ Read(by_date/2025-08/2508.21819v1_fulltext.txt)
+  ⎿  Read 10 lines (ctrl+r to expand)
+
+⏺ Perfect! I can see the format. Each paper has a "TITLE:" followed by the
+  actual title. Let me create a script to extract all titles chronologically
+  and find when specific technical terms first appeared.
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand organization     
+     ☒ Identify common technical terms from paper titles
+     ☐ Search chronologically for first appearances of key terms
+     ☐ Report findings with earliest dates for each term
+
+⏺ Bash(find /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000
+      _papers/by_date -name "*.txt" | sort | head -20 | xargs grep -H
+      "^TITLE:" | head -20)
+  ⎿ /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20277v2_fulltext.txt:TITLE: OmniCharacter:
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    … +55 lines (ctrl+r to expand)
+
+
+
+⏺ Now let me get the complete chronological list and search for specific
+  technical terms.
+
+⏺ Bash(find /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000
+      _papers/by_date -name "*.txt" | sort | xargs grep -H "^TITLE:" >
+      /tmp/all_titles_chronolo…)
+  ⎿  (No content)
+
+⏺ Read(/tmp/all_titles_chronological.txt)
+  ⎿  Read 50 lines (ctrl+r to expand)
+
+⏺ Now let me search for when specific technical terms first appeared in the
+  titles. I'll look for some key AI/ML terms that are commonly discussed in
+  research.
+
+⏺ Bash(grep -i -E "(transformer|attention|bert|gpt|llm|diffusion|gan|vae|cnn|r
+      nn|lstm|reinforcement|federated|neural network|deep learning|machine
+      learning|ai|artifici…)
+  ⎿ /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20277v2_fulltext.txt:TITLE: OmniCharacter:
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    … +55 lines (ctrl+r to expand)
+
+
+
+⏺ Let me be more specific and search for individual terms to find their first
+  occurrences:
+
+⏺ Bash(echo "=== TRANSFORMER ===" && grep -i "transformer"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === TRANSFORMER ===                                                       
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20481v1_fulltext.txt:TITLE: CardioPatternFormer: Patt
+    … +10 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== DIFFUSION ===" && grep -i "diffusion"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === DIFFUSION ===                                                         
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20297v1_fulltext.txt:TITLE: DiSA: Diffusion Step Anne
+    … +8 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== LLM/LARGE LANGUAGE MODEL ===" && grep -i -E "(llm|large
+      language model)" /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === LLM/LARGE LANGUAGE MODEL ===                                          
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20416v1_fulltext.txt:TITLE: GraphGen: Enhancing Super
+    … +7 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== FEDERATED LEARNING ===" && grep -i "federated"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === FEDERATED LEARNING ===                                                
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20456v1_fulltext.txt:TITLE: Federated Learning-Distil
+    … +7 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== GAN/GENERATIVE ADVERSARIAL ===" && grep -i -E
+      "(gan|generative adversarial)" /tmp/all_titles_chronological.txt | head
+      -3)
+  ⎿ === GAN/GENERATIVE ADVERSARIAL ===                                        
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20277v2_fulltext.txt:TITLE: OmniCharacter:
+    … +6 lines (ctrl+r to expand)
+
+
+⏺ Bash(echo "=== VISION-LANGUAGE MODEL ===" && grep -i -E
+      "(vision-language|vision language|vlm)"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === VISION-LANGUAGE MODEL ===                                             
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20279v2_fulltext.txt:TITLE: VLM-3R: Vision-Language M
+    … +8 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== REINFORCEMENT LEARNING ===" && grep -i "reinforcement"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === REINFORCEMENT LEARNING ===                                            
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-06/2506.09942v1_fulltext.txt:TITLE: VerIF: Verification Engin
+    … +8 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== ATTENTION ===" && grep -i "attention"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === ATTENTION ===                                                         
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20454v1_fulltext.txt:TITLE: BlastOFormer: Attention a
+    … +8 lines (ctrl+r to expand)
+
+
+
+⏺ Let me search for a few more terms and also extract the dates properly:
+
+⏺ Bash(echo "=== NEURAL NETWORK ===" && grep -i "neural"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === NEURAL NETWORK ===                                                    
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20454v1_fulltext.txt:TITLE: BlastOFormer: Attention a
+    … +7 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== AUTOENCODER ===" && grep -i "autoencoder"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === AUTOENCODER ===                                                       
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-05/2505.20535v1_fulltext.txt:TITLE: Rotary Masked Autoencoder
+    … +8 lines (ctrl+r to expand)
+
+
+
+⏺ Bash(echo "=== SELF-SUPERVISED ===" && grep -i "self-supervised"
+      /tmp/all_titles_chronological.txt | head -3)
+  ⎿ === SELF-SUPERVISED ===                                                   
+    /Users/loganmarkewich/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers/
+    by_date/2025-06/2506.09785v1_fulltext.txt:TITLE: A theoretical framework f
+    … +7 lines (ctrl+r to expand)
+
+
+
+⏺ Now let me extract the exact dates and create a comprehensive report. Let me
+   parse the file paths to get the dates:
+
+⏺ Bash(python3 -c "
+      import re…)
+  ⎿  === FIRST APPEARANCES OF TECHNICAL TERMS IN PAPER TITLES ===
+
+     **Transformer**: 2025-05 (Paper: 2505.20481)
+     … +45 lines (ctrl+r to expand)
+
+⏺ Let me search for a few more interesting terms and then provide the final
+  report:
+
+⏺ Bash(python3 -c "
+      import re…)
+  ⎿  === ADDITIONAL TECHNICAL TERMS ===                       
+
+     **Graph Neural Network/GNN**: 2025-06 (Paper: 2506.09682)
+     … +43 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand organization     
+     ☒ Identify common technical terms from paper titles
+     ☒ Search chronologically for first appearances of key terms
+     ☐ Report findings with earliest dates for each term
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand organization     
+     ☒ Identify common technical terms from paper titles
+     ☒ Search chronologically for first appearances of key terms
+     ☒ Report findings with earliest dates for each term
+
+⏺ First Appearances of Technical Terms in ArXiv Paper Titles (May-August 2025)
+
+  Based on analysis of 1,000 papers organized chronologically from 2025-05 to
+  2025-08, here are the first appearances of key technical terms in paper
+  titles:
+
+  Earliest Appearances (May 2025)
+
+  Vision-Language Models - May 2025 (Position #3)
+  - Paper: 2505.20279
+  - Title: "VLM-3R: Vision-Language Models Augmented"
+
+  Diffusion - May 2025 (Position #11)
+  - Paper: 2505.20297
+  - Title: "DiSA: Diffusion Step Annealing in Autoregressive Image Generation"
+
+  Fine-tuning - May 2025 (Position #15)
+  - Paper: 2505.20416
+  - Title: "GraphGen: Enhancing Supervised Fine-Tuning for LLMs with
+  Knowledge-Driven Synthetic Data Generation"
+
+  LLM/Large Language Model - May 2025 (Position #15)
+  - Same paper as Fine-tuning above
+
+  Foundation Model - May 2025 (Position #16)
+  - Paper: 2505.20422
+  - Title: "Semma: A Semantic Aware Knowledge Graph Foundation Model"
+
+  Other Notable May 2025 Appearances
+
+  Attention & Neural Networks - May 2025 (Position #26)
+  - Paper: 2505.20454
+  - Title: "BlastOFormer: Attention and Neural Operator Deep Learning Methods
+  for Explosive Blast Prediction"
+
+  Contrastive Learning - May 2025 (Position #30)
+  - Paper: 2505.20469
+  - Title: "CCL-LGS: Contrastive Codebook Learning for 3D Language Gaussian
+  Splatting"
+
+  Transformer - May 2025 (Position #33)
+  - Paper: 2505.20481
+  - Title: "CardioPatternFormer: Pattern-Guided Attention for Interpretable
+  ECG Classification with Transformer Architecture"
+
+  Multimodal - May 2025 (Position #41)
+  - Paper: 2505.20511
+  - Title: "Multimodal Emotion Recognition in Conversations"
+
+  Autoencoder - May 2025 (Position #48)
+  - Paper: 2505.20535
+  - Title: "Rotary Masked Autoencoders are Versatile Learners"
+
+  June 2025 Appearances
+
+  Graph Neural Network - June 2025 (Position #74)
+  - Paper: 2506.09682
+  - Title: "Wasserstein Hypergraph Neural Network"
+
+  Self-Supervised - June 2025 (Position #96)
+  - Paper: 2506.09785
+  - Title: "A theoretical framework for self-supervised contrastive learning
+  for continuous dependent data"
+
+  Reinforcement Learning - June 2025 (Position #127)
+  - Paper: 2506.09942
+  - Title: "VerIF: Verification Engineering for Reinforcement Learning"
+
+  CNN/Convolutional Neural Network - June 2025 (Position #165)
+  - Paper: 2506.10119
+  - Title: "Detecção da Psoríase Utilizando Visão Computacional: Uma Abordagem
+   Comparativa Entre CNNs e Vision Transformers"
+
+  Zero-shot - June 2025 (Position #202)
+  - Paper: 2506.11166
+  - Title: "Test-Time-Scaling for Zero-Shot Diagnosis with Visual-Language
+  Reasoning"
+
+  GPT - June 2025 (Position #269)
+  - Paper: 2506.22105
+  - Title: "Identifying a Circuit for Verb Conjugation in GPT‑2"
+
+  Later Appearances
+
+  Few-shot - July 2025 (Position #549)
+  - Paper: 2507.21728
+  - Title: "A Generalized Few-Shot Transfer Learning Architecture for Modeling
+   EDFA Gain Spectrum"
+
+  Key Observations
+
+  1. Vision-Language Models appeared earliest (position #3), indicating this
+  was a dominant research area
+  2. Diffusion models appeared very early (position #11), showing their
+  continued importance
+  3. LLMs and Fine-tuning appeared together early (position #15), reflecting
+  the focus on LLM optimization
+  4. Most foundational AI/ML terms appeared within the first 50 papers of May
+  2025
+  5. More specialized terms like Few-shot learning appeared much later in the
+  timeline
+
+  The data shows May 2025 was particularly rich in diverse AI/ML research
+  topics, with most major technical terms making their first appearances in
+  paper titles during this month.
+
+
+Total cost:            $0.59
+Total duration (API):  3m 12.9s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  15.5k input, 3.2k output, 0 cache read, 0 cache write
+       claude-sonnet:  39 input, 5.7k output, 892.8k cache read, 55.2k cache write
+```

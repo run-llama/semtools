@@ -1,0 +1,256 @@
+5. "Find papers on computer vision applications" (semantic - CV, image processing, etc.)
+
+With `search`:
+```bash
+> Find papers on computer vision applications
+
+⏺ I'll search for papers on computer vision applications in this ArXiv dataset.
+
+⏺ Bash(search "computer vision applications" full_text/*.txt --top-k 10
+      --max-distance 0.4)
+  ⎿  full_text/2507.21589v1.txt:1248::1255 (0.09961908466347555)              
+     1249: Masayoshi Tomizuka, Joseph Gonzalez, Kurt Keutzer, and Peter Vajda.
+     1250:
+     … +902 lines (ctrl+r to expand)
+
+⏺ Let me search more specifically for computer vision applications to get
+  clearer results:
+
+⏺ Bash(search "computer vision" full_text/*.txt --top-k 15 --max-distance 0.3 |
+       grep -i "application\|medical\|autonomous\|robotics\|manufacturing\|surv
+      eillance")
+  ⎿  Error: Error
+
+⏺ Let me try a different approach to find specific computer vision
+  applications:
+
+⏺ Bash(search "medical computer vision" full_text/*.txt --top-k 5
+      --max-distance 0.4)
+  ⎿  full_text/2507.21589v1.txt:1248::1255 (0.13993566398451804)              
+     1249: Masayoshi Tomizuka, Joseph Gonzalez, Kurt Keutzer, and Peter Vajda.
+     1250:
+     … +488 lines (ctrl+r to expand)
+
+⏺ Let me search for autonomous vehicles and robotics applications:
+
+⏺ Bash(search "autonomous vehicle" full_text/*.txt --top-k 5)
+  ⎿  full_text/2506.21874v1.txt:2388::2395 (0.16879989732996997)
+     2389: 2024.
+     2390:
+     … +41 lines (ctrl+r to expand)
+
+⏺ Bash(search "object detection" full_text/*.txt --top-k 5)
+  ⎿  full_text/2507.21872v3.txt:645::652 (0.0021050274233870847)
+      646: Yang, J.; Su, H.; et al. 2024.
+      647:
+     … +41 lines (ctrl+r to expand)
+
+⏺ Now let me search for surveillance and security applications:
+
+⏺ Bash(search "surveillance" full_text/*.txt --top-k 3)
+  ⎿  full_text/2505.20536v1.txt:2259::2266 (0.29888157258597875)           
+     2260:
+     2261: Estimated number of lives directly saved by covid-19 vaccination
+     … +29 lines (ctrl+r to expand)
+
+⏺ Let me get the titles and abstracts of some papers to provide better context:
+
+⏺ Read(full_text/2508.00917v1.txt)
+  ⎿  Read 50 lines (ctrl+r to expand)
+
+⏺ Let me also get one medical computer vision paper:
+
+⏺ Read(full_text/2508.10528v1.txt)
+  ⎿  Read 30 lines (ctrl+r to expand)
+
+⏺ Read(full_text/2508.10528v1.txt)
+  ⎿  Read 20 lines (ctrl+r to expand)
+
+⏺ Now let me search for manufacturing applications more specifically:
+
+⏺ Read(full_text/2506.22174v1.txt)
+  ⎿  Read 50 lines (ctrl+r to expand)
+
+⏺ Based on my search through the ArXiv dataset, here are papers on computer
+  vision applications:
+
+  Computer Vision Applications Papers Found:
+
+  Autonomous Vehicles & Transportation
+
+  - "A Survey on Deep Multi-Task Learning in Connected Autonomous Vehicles"
+  (2508.00917v1) - Comprehensive review of multi-task learning for connected
+  autonomous vehicles, covering perception, prediction, planning, and control
+  using computer vision
+  - "Visual adversarial attack on vision-language models for autonomous 
+  driving" (2506.21874v1) - Focuses on security aspects of vision systems in
+  autonomous vehicles
+  - "Towards learning-based planning: the nuplan benchmark for real-world 
+  autonomous driving" (2506.21976v1) - Real-world autonomous driving
+  applications
+
+  Medical Computer Vision
+
+  - "Med-GLIP: Advancing Medical Language-Image Pre-training with Large-scale 
+  Grounded Dataset" (2508.10528v1) - Medical image grounding for diagnosis,
+  visual question answering, and automated report generation across seven
+  imaging modalities (CT, MRI, ultrasound, etc.)
+  - "Clinical target-volume delineation in prostate brachytherapy using 
+  residual neural networks" (2506.09805v1) - Medical Image Computing and
+  Computer Assisted Intervention applications
+  - "U-net: Convolutional networks for biomedical image segmentation"
+  (2507.02939v2) - Biomedical image processing applications
+
+  Manufacturing & Industrial Applications
+
+  - "Computer vision techniques in manufacturing" (2506.22174v1) - IEEE
+  Transactions paper on computer vision applications in manufacturing systems
+  - "ASVSim (AirSim for Surface Vehicles)" (2506.22174v1) - Simulation
+  framework for autonomous surface vehicles
+
+  Explainable AI & Computer Vision
+
+  - "Gradient-based explanation methods in computer vision" (2508.10490v1) -
+  Safety-critical applications requiring explainable computer vision systems
+  - Papers on Detection Transformer and Object Detection for explainable AI
+  (2507.21723v1)
+
+  General Computer Vision Applications
+
+  - "A review of synthetic image data and its use in computer vision"
+  (2506.15690v3) - Comprehensive review of synthetic data applications
+  - "Computer Vision and Pattern Recognition" - Multiple papers referencing
+  applications in face verification, image recognition, and pattern analysis
+  - "Deep learning for deepfakes creation and detection" (2506.09847v1) -
+  Computer Vision and Image Understanding applications for media forensics
+
+  Low Vision Accessibility
+
+  - Papers on vision-language models simulating people with low vision for
+  accessibility applications (2508.10972v1)
+
+  These papers demonstrate computer vision applications across healthcare,
+  autonomous systems, manufacturing, security, accessibility, and other
+  domains, showing the broad practical impact of computer vision research.
+
+
+Total cost:            $0.2575
+Total duration (API):  1m 12.4s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  28.1k input, 939 output, 0 cache read, 0 cache write
+       claude-sonnet:  57 input, 1.8k output, 346.0k cache read, 26.7k cache write
+```
+
+Without `search`:
+```bash
+> Find papers on computer vision applications
+
+⏺ I'll search for papers related to computer vision applications in this ArXiv
+  dataset.
+
+⏺ Update Todos
+  ⎿  ☐ Search for computer vision papers by category                    
+     ☐ Search for computer vision keywords in paper titles and abstracts
+     ☐ Compile list of relevant computer vision papers found
+
+⏺ Update Todos
+  ⎿  ☐ Search for computer vision papers by category                    
+     ☐ Search for computer vision keywords in paper titles and abstracts
+     ☐ Compile list of relevant computer vision papers found
+
+⏺ List(by_category)
+  ⎿  Listed 945 paths (ctrl+r to expand)
+
+⏺ Search(pattern: "(computer vision|image recognition|object detection|image
+        processing|visual|CNN|convolutional|vision|segmentation|detection)",
+        head_limit: 20)
+  ⎿  Found 20 files (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Search for computer vision papers by category                    
+     ☐ Search for computer vision keywords in paper titles and abstracts
+     ☐ Compile list of relevant computer vision papers found
+
+⏺ Search(pattern: "**/cs.CV/**")
+  ⎿  Found 100 files (ctrl+r to expand)
+
+⏺ Search(pattern: "(TITLE.*computer
+        vision|TITLE.*image|TITLE.*visual|TITLE.*CNN|TITLE.*object
+        detection|TITLE.*segmentation|TITLE.*deep
+        learning.*vision|TITLE.*neural.*image)", output_mode: "content",
+        head_limit: 10)
+  ⎿  Found 10 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Search for computer vision papers by category                    
+     ☒ Search for computer vision keywords in paper titles and abstracts
+     ☐ Compile list of relevant computer vision papers found
+
+⏺ Read(by_category/cs.CV/2507.22274v1_fulltext.txt)
+  ⎿  Read 20 lines (ctrl+r to expand)
+
+⏺ Read(by_category/cs.CV/2508.21816v1_fulltext.txt)
+  ⎿  Read 20 lines (ctrl+r to expand)
+
+⏺ Read(by_category/cs.CV/2508.10993v1_fulltext.txt)
+  ⎿  Read 20 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Search for computer vision papers by category                    
+     ☒ Search for computer vision keywords in paper titles and abstracts
+     ☒ Compile list of relevant computer vision papers found
+
+⏺ Found 93 computer vision papers in the cs.CV category and additional papers
+  with computer vision keywords. Here are some notable applications:
+
+  Medical Image Analysis
+
+  - HOG-CNN: Integrating Histogram of Oriented Gradients with Convolutional 
+  Neural Networks for Retinal Image Classification (2507.22274v1) - Automated
+  retinal disease screening for DR, Glaucoma, and AMD
+  - Test-Time-Scaling for Zero-Shot Diagnosis with Visual-Language Reasoning
+  (2506.11166v1) - Medical diagnosis using vision-language models
+  - U-Net: Convolutional Networks for Biomedical Image - Medical image
+  segmentation
+
+  Image Generation & Enhancement
+
+  - Match & Choose: Model Selection Framework for Fine-tuning Text-to-Image 
+  Diffusion Models (2508.10993v1) - Text-to-image generation optimization
+  - DiSA: Diffusion Step Annealing in Autoregressive Image Generation
+  (2505.20297v1) - Advanced image generation techniques
+  - Text-Aware Image Restoration with Diffusion Models (2506.09993v2) - Image
+  restoration and enhancement
+
+  Object Detection & Recognition
+
+  - The Demon is in Ambiguity: Revisiting Situation Recognition with Single 
+  Positive Multi-Label Learning (2508.21816v1) - Scene understanding and
+  situation recognition
+  - From Ground to Air: Noise Robustness in Vision Transformers and CNNs for 
+  Event-Based Vehicle Classification (2506.22360v1) - Vehicle detection for UAV
+   applications
+
+  Robotics & Tactile Applications
+
+  - ControlTac: Force- and Position-Controlled Tactile Data Augmentation with a
+   Single Reference Image (2505.20498v2) - Tactile sensing with computer vision
+
+  Text-Image Retrieval
+
+  - Visualized Text-to-Image Retrieval (2505.20291v1) - Cross-modal retrieval
+  systems
+
+  The papers span applications in healthcare, autonomous systems, content
+  generation, and human-computer interaction, showcasing the broad
+  applicability of computer vision technologies.
+
+
+Total cost:            $0.2191
+Total duration (API):  58.6s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  91 input, 25 output, 0 cache read, 0 cache write
+       claude-sonnet:  39 input, 2.2k output, 245.7k cache read, 30.0k cache write
+```

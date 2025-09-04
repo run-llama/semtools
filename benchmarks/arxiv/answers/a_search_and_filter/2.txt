@@ -1,0 +1,45 @@
+2. "Find papers with exact title containing 'BERT'" (exact match - tests tool choice)
+
+With `search`:
+```bash
+> Find papers with exact title containing 'BERT'
+
+⏺ Bash(grep -r "TITLE:.*BERT" . --include="*.txt")
+  ⎿  ./full_text/2507.21609v1.txt:TITLE: Multilingual JobBERT for
+     Cross-Lingual Job Title Matching
+
+⏺ Found 1 paper with "BERT" in the title: Multilingual JobBERT 
+  for Cross-Lingual Job Title Matching (paper ID: 2507.21609v1).
+
+
+Total cost:            $0.0199
+Total duration (API):  8.2s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  440 input, 73 output, 0 cache read, 0 cache write
+       claude-sonnet:  11 input, 142 output, 31.0k cache read, 2.1k cache write
+```
+
+Without `search`:
+```bash
+> Find papers with exact title containing 'BERT'
+
+⏺ I'll search for papers with exact titles containing 'BERT'
+  across the arxiv dataset.
+
+⏺ Search(pattern: "^TITLE:.*BERT.*", output_mode: "content")
+  ⎿  Found 1 line (ctrl+r to expand)
+
+⏺ Found 1 paper with 'BERT' in the exact title:
+
+  Multilingual JobBERT for Cross-Lingual Job Title Matching
+  (full_text/2507.21609v1.txt:1)
+
+
+Total cost:            $0.0282
+Total duration (API):  8.1s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  96 input, 26 output, 0 cache read, 0 cache write
+       claude-sonnet:  11 input, 189 output, 27.2k cache read, 4.5k cache write
+```
