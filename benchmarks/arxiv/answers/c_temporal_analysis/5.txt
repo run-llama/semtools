@@ -1,0 +1,282 @@
+5. "Find authors who shifted research focus between months, if any" (semantic topic change detection)
+
+With `search`:
+```bash
+> Find authors who shifted research focus between months, if any
+
+⏺ I'll help you find authors who shifted research focus between months by
+  analyzing the ArXiv dataset organized by date and author. Let me create a
+  plan for this analysis.
+
+⏺ Update Todos
+  ⎿  ☐ Explore the dataset structure to understand date ranges and author     
+       coverage
+     ☐ Extract authors who published papers in multiple months
+     ☐ Analyze research topics/categories for each author across different
+       months
+     ☐ Identify authors with significant topic shifts between months
+
+⏺ Update Todos
+  ⎿  ☐ Explore the dataset structure to understand date ranges and author     
+       coverage
+     ☐ Extract authors who published papers in multiple months
+     ☐ Analyze research topics/categories for each author across different
+       months
+     ☐ Identify authors with significant topic shifts between months
+
+⏺ Let me first explore the dataset structure to understand the available date
+  ranges and authors.
+
+⏺ List(~/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers)
+  ⎿  Listed 1371 paths (ctrl+r to expand)
+
+⏺ List(by_date)
+  ⎿  Listed 982 paths (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand date ranges and author     
+       coverage
+     ☐ Extract authors who published papers in multiple months
+     ☐ Analyze research topics/categories for each author across different
+       months
+     ☐ Identify authors with significant topic shifts between months
+
+⏺ Now I need to find authors who published in multiple months. I can see the
+  dataset has papers from 2025-05, 2025-06, 2025-07, and 2025-08. Let me
+  create a script to extract authors from each month and find those who
+  published across different months.
+
+⏺ Bash(find by_date -name "*.txt" | head -20)
+  ⎿  by_date/2025-06/2506.09765v1_fulltext.txt
+     by_date/2025-06/2506.21931v2_fulltext.txt
+     by_date/2025-06/2506.22374v1_fulltext.txt
+     … +17 lines (ctrl+r to expand)
+
+⏺ Let me create a script to extract authors from the filenames and find those
+  who published in multiple months.
+
+⏺ Write(find_multi_month_authors.py)
+  ⎿  Wrote 58 lines to find_multi_month_authors.py                            
+     #!/usr/bin/env python3
+     import os
+     import re
+     from collections import defaultdict
+     from pathlib import Path
+     def extract_author_month_pairs():
+         """Extract author names and their publication months from the 
+     by_author and by_date directories."""
+     … +48 lines (ctrl+r to expand)
+
+⏺ Bash(python3 find_multi_month_authors.py)
+  ⎿  Found 82 authors who published in multiple months:
+
+     Aideen_Fay: 2025-05, 2025-06
+     … +81 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand date ranges and author     
+       coverage
+     ☒ Extract authors who published papers in multiple months
+     ☐ Analyze research topics/categories for each author across different 
+       months
+     ☐ Identify authors with significant topic shifts between months
+
+⏺ Great! I found 82 authors who published papers in multiple months. Now I
+  need to analyze their research topics to detect potential shifts. Let me
+  create a script to extract titles and abstracts from their papers and
+  analyze the content for topic shifts.
+
+⏺ Write(analyze_topic_shifts.py)
+  ⎿  Wrote 215 lines to analyze_topic_shifts.py                 
+     #!/usr/bin/env python3
+     import os
+     import re
+     from collections import defaultdict, Counter
+     from pathlib import Path
+     import nltk
+     from sklearn.feature_extraction.text import TfidfVectorizer
+     from sklearn.metrics.pairwise import cosine_similarity
+     import numpy as np
+     … +205 lines (ctrl+r to expand)
+
+⏺ Bash(pip install scikit-learn nltk --quiet)
+  ⎿  Error: (eval):1: command not found: pip
+
+⏺ Bash(python3 -m pip install scikit-learn nltk --quiet)
+  ⎿  Error: /Users/loganmarkewich/semtools/benchmarks/arxiv/.venv/bin/python3: 
+     No module named pip
+
+⏺ Let me try a simpler approach without external dependencies - I'll use basic
+   text analysis to detect topic shifts.
+
+⏺ Write(simple_topic_analysis.py)
+  ⎿  Wrote 233 lines to simple_topic_analysis.py            
+     #!/usr/bin/env python3
+     import os
+     import re
+     from collections import defaultdict, Counter
+     from pathlib import Path
+     def extract_paper_content(paper_path):
+         """Extract title and abstract from a paper file."""
+         try:
+     … +223 lines (ctrl+r to expand)
+
+⏺ Bash(python3 simple_topic_analysis.py)
+  ⎿ Analyzing topic shifts for multi-month authors using simple keyword analys
+    is...
+    Analyzing 82 authors who published in multiple months...
+    … +178 lines (ctrl+r to expand)
+
+
+⏺ Update Todos
+  ⎿  ☒ Explore the dataset structure to understand date ranges and author     
+       coverage
+     ☒ Extract authors who published papers in multiple months
+     ☒ Analyze research topics/categories for each author across different 
+       months
+     ☒ Identify authors with significant topic shifts between months
+
+⏺ Perfect! I found 85 significant topic shifts among authors who published
+  papers in multiple months. Here are the key findings:
+
+  Authors with Major Research Focus Shifts:
+
+  1. Shay B. Cohen (2025-06 → 2025-08): Complete shift from conversational AI
+  personalization to probabilistic reasoning systems
+  2. Haoran Sun (2025-07 → 2025-08): Dramatic change from genomic medicine
+  (DNA analysis) to physics-informed inverse scattering problems
+  3. Jingyu Liu (2025-05 → 2025-08): Shifted from LLM optimization techniques
+  to heterogeneous data representation learning
+  4. Hyunjung Shim (2025-06 → 2025-08): Moved from 3D-aware vision-language
+  models to scientific poster collaboration systems
+  5. Li Du (2025-07 → 2025-08): Transitioned from automated reasoning tools to
+   analog circuit diagram analysis
+  6. Zhaoran Wang (2025-05 → 2025-06): Changed from Bayesian adaptive
+  reasoning to strategic online decision making
+  7. Yang Liu (2025-05 → 2025-06): Shifted from emotion recognition to
+  software requirement development frameworks
+  8. Fan Zhang (2025-06 → 2025-07): Moved from LLM pretraining optimization to
+   medical tractometry analysis
+
+  These authors show complete topic divergence (100% shift magnitude) between
+  their publications in different months, indicating they either:
+  - Changed research directions entirely
+  - Collaborate across very different domains
+  - Work on diverse projects simultaneously
+  - May represent different researchers with similar names
+
+  The analysis reveals that several prominent researchers in AI/ML are
+  exploring vastly different domains within short timeframes, suggesting
+  either interdisciplinary collaboration or rapid pivoting in research focus.
+
+
+Total cost:            $0.53
+Total duration (API):  2m 19.9s
+Total code changes:    506 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  5.2k input, 129 output, 0 cache read, 0 cache write
+       claude-sonnet:  38 input, 8.5k output, 718.7k cache read, 49.2k cache write
+```
+
+Without `search`:
+```bash
+> Find authors who shifted research focus between months, if any
+
+⏺ I'll help you find authors who shifted research focus between months by
+  analyzing their papers across different time periods. Let me start by
+  exploring the dataset structure and then analyze author publication
+  patterns.
+
+⏺ Update Todos
+  ⎿  ☐ Explore dataset structure to understand available data             
+     ☐ Analyze authors' papers across different months
+     ☐ Identify research focus shifts by comparing paper topics/categories
+     ☐ Generate report of authors with shifted research focus
+
+⏺ List(~/semtools/benchmarks/arxiv/arxiv_dataset_1000_papers)
+  ⎿  Listed 1371 paths (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand available data             
+     ☐ Analyze authors' papers across different months
+     ☐ Identify research focus shifts by comparing paper topics/categories
+     ☐ Generate report of authors with shifted research focus
+
+⏺ List(by_date)
+  ⎿  Listed 982 paths (ctrl+r to expand)
+
+⏺ Now I'll create a script to analyze authors who have published papers across
+   multiple months and identify potential research focus shifts by comparing
+  their paper topics/categories.
+
+⏺ Write(analyze_research_shifts.py)
+  ⎿  Wrote 291 lines to analyze_research_shifts.py                 
+     #!/usr/bin/env python3
+     import os
+     import re
+     from collections import defaultdict, Counter
+     from datetime import datetime
+     def extract_paper_info(filepath):
+         """Extract paper information from filename and content."""
+         filename = os.path.basename(filepath)
+     … +281 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand available data             
+     ☒ Analyze authors' papers across different months
+     ☐ Identify research focus shifts by comparing paper topics/categories
+     ☐ Generate report of authors with shifted research focus
+
+⏺ Bash(python3 analyze_research_shifts.py)
+  ⎿  Analyzing research focus shifts...
+     Scanning author directories...
+     Found papers for 4557 authors
+     … +42 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Explore dataset structure to understand available data             
+     ☒ Analyze authors' papers across different months
+     ☒ Identify research focus shifts by comparing paper topics/categories
+     ☒ Generate report of authors with shifted research focus
+
+⏺ Read(research_focus_shifts_report.md)
+  ⎿  Read 33 lines (ctrl+r to expand)
+
+⏺ Based on my analysis of the ArXiv dataset, I found one author who shifted 
+  research focus between months:
+
+  Haoran Sun
+
+  Research Focus Shift Detected: July 2025 → August 2025
+
+  - From: AI/ML + NLP + Systems (DNA foundation models)
+  - To: AI/ML + Computer Vision + Theory + Systems (physics-informed inverse
+  scattering)
+  - Similarity Score: 0.40 (indicating a significant shift)
+
+  Papers:
+
+  1. July 2025: "EnTao-GPM: DNA Foundation Model for Predicting the Germline
+  Pathogenic Mutations"
+  2. August 2025: "Physics-Informed Deep Contrast Source Inversion: A Unified
+  Framework for Inverse Scattering Problems"
+
+  This represents a notable shift from biological/genomic AI applications to
+  physics-informed computational methods, showing how the author moved from
+  NLP-focused DNA sequence modeling to computer vision and theoretical
+  approaches for inverse scattering problems.
+
+  The analysis examined 4,557 authors across the dataset and found that most
+  authors either published in single months or maintained consistent research
+  themes across their publications, making Haoran Sun's interdisciplinary
+  shift between biological AI and computational physics particularly
+  noteworthy.
+
+
+Total cost:            $0.3542
+Total duration (API):  1m 36.8s
+Total code changes:    291 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  1.3k input, 108 output, 0 cache read, 0 cache write
+       claude-sonnet:  28 input, 4.8k output, 382.1k cache read, 44.4k cache write
+```

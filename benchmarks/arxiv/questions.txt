@@ -1,0 +1,21 @@
+a. Simple Search & Filter
+    1. "Find papers discussing 'attention mechanisms'" (semantic - various terms like self-attention, cross-attention, etc.)
+    2. "Find papers with exact title containing 'BERT'" (exact match - tests tool choice)
+    3. "Show papers about machine learning optimization" (semantic - various related terms)
+    4. "List all papers with 'v2' in their filename" (exact match - file pattern)
+    5. "Find papers on computer vision applications" (semantic - CV, image processing, etc.)
+
+b. Cross-Reference & Relationships
+    1. "Find papers with similar abstracts to paper 2506.09738v1" (pure semantic similarity)
+    2. "Which authors work on both 'transformers' and 'graph neural networks'?" (semantic topic overlap)
+    3. "Find exact co-author relationships for papers containing 'meta-learning'" (hybrid: semantic + exact)
+    4. "The author in './by_author/Yang_Yang' has the most papers. What did they discuss and was their ressearch similar to others published at the time?" (semantic author overlap)
+    5. "Show collaboration patterns between computer vision and NLP researchers" (semantic field identification)
+
+c. Temporal Analysis
+    1. "Track the evolution of 'large language model' terminology over the three months" (semantic evolution)
+    2. "Find when specific technical terms first appeared in paper titles" (exact temporal tracking)
+    3. "Identify emerging research themes in August 2025" (semantic trend detection)
+    4. "Compare semantic similarity of abstracts between June and August papers" (semantic temporal analysis)
+    5. "Find authors who shifted research focus between months" (semantic topic change detection)
+

@@ -1,0 +1,160 @@
+1. "Find papers discussing 'attention mechanisms'" (semantic - various terms like self-attention, cross-attention, etc.)
+
+With `search`:
+```bash
+> Find papers discussing 'attention mechanisms'
+
+⏺ I'll search for papers discussing attention mechanisms in your
+  ArXiv dataset.
+
+⏺ Bash(search "attention mechanisms" full_text/*.txt --top-k 10
+      --n-lines 5)
+  ⎿ full_text/2508.21433v1.txt:1086::1097 (0.12964854035021264)  
+    1087: tokens are created and when they’re validated. Check if
+     there’s another
+    … +220 lines (ctrl+r to expand)
+
+
+⏺ Let me search more specifically for "attention" to find more
+  relevant papers:
+
+⏺ Bash(search "attention" full_text/*.txt --top-k 15
+      --max-distance 0.25 --n-lines 3)
+  ⎿ full_text/2508.11068v1.txt:1322::1329 (0.00000000000000000001
+    1434945554705854)
+    1323: paper
+    … +352 lines (ctrl+r to expand)
+
+
+⏺ Let me get the titles of the most relevant papers to attention
+  mechanisms:
+
+⏺ Bash(head -1 full_text/2506.22084v1.txt)
+  ⎿  TITLE: Transformers are Graph Neural Networks
+
+⏺ Bash(head -1 full_text/2505.20280v1.txt)
+  ⎿  TITLE: Lorentz Local Canonicalization:
+
+⏺ Bash(head -1 full_text/2507.21589v1.txt)
+  ⎿  TITLE: Exploring the Link Between Bayesian Inference and
+
+⏺ Bash(head -1 full_text/2508.10899v1.txt)
+  ⎿ TITLE: A Dataset for Distilling Knowledge Priors from Literat
+    ure for Therapeutic Design
+
+
+⏺ Bash(head -1 full_text/2506.10140v1.txt)
+  ⎿ TITLE: Survival Analysis as Imprecise Classification with Tra
+    inable Kernels
+
+
+⏺ Here are the papers discussing attention mechanisms that I
+  found in your dataset:
+
+  Key Papers on Attention Mechanisms:
+
+  1. "Transformers are Graph Neural Networks" (2506.22084v1.txt)
+    - Discusses the attention mechanism as the central component
+  of Transformers
+    - Explains how attention allows representations to capture
+  relative importance between words
+    - Covers how Transformers build representations in parallel
+  via attention mechanisms
+  2. "Lorentz Local Canonicalization" (2505.20280v1.txt)
+    - Compares Minkowski attention to Euclidean attention
+    - Shows benefits of different attention mechanisms in
+  geometric contexts
+  3. "Survival Analysis as Imprecise Classification with 
+  Trainable Kernels" (2506.10140v1.txt)
+    - Proposes models that can be trained using different
+  attention mechanisms
+    - Includes neural network-based attention and Gaussian kernel
+   attention weights
+  4. "A Dataset for Distilling Knowledge Priors from Literature 
+  for Therapeutic Design" (2508.10899v1.txt)
+    - References "MolE: a foundation model for molecular graphs
+  using disentangled attention"
+    - Focuses on attention mechanisms for molecular graph
+  analysis
+  5. "Exploring the Link Between Bayesian Inference and"
+  (2507.21589v1.txt)
+    - References "Sara-rt: Scaling up robotics transformers with
+  self-adaptive robust attention"
+    - Discusses attention mechanisms in robotics applications
+
+  The most comprehensive discussion of attention mechanisms
+  appears in the Transformers paper (2506.22084v1.txt), which
+  explains the fundamental concepts and mathematical foundations
+  of attention in neural networks.
+
+
+Total cost:            $0.1158
+Total duration (API):  47.4s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  9.8k input, 517 output, 0 cache read, 0 cache write
+       claude-sonnet:  36 input, 1.1k output, 171.7k cache read, 10.1k cache write
+```
+
+Without `search`:
+```bash
+> Find papers discussing 'attention mechanisms'
+
+⏺ I'll search for papers discussing 'attention mechanisms' across the ArXiv dataset.
+  Let me create a todo list to track this search task and then search through the
+  papers.
+
+⏺ Update Todos
+  ⎿  ☐ Search for papers discussing 'attention mechanisms'
+
+⏺ Search(pattern: "attention mechanism", path: "full_text")
+  ⎿  Found 164 files (ctrl+r to expand)
+
+⏺ Now let me get the titles of some of these papers to provide you with specific
+  examples:
+
+⏺ Search(pattern: "^TITLE:", path: "full_text", output_mode: "content", head_limit: 20)
+  ⎿  Found 20 lines (ctrl+r to expand)
+
+⏺ Let me search for the actual titles of papers that mention attention mechanisms:
+
+⏺ Bash(grep -l "attention mechanism" full_text/*.txt | head -10 | xargs -I {} sh -c
+      'echo "=== {} ===" && head -5 "{}" | grep "^TITLE:"')
+  ⎿  === full_text/2505.20279v2.txt ===             
+     TITLE: VLM-3R: Vision-Language Models Augmented
+     === full_text/2505.20292v4.txt ===
+     … +22 lines (ctrl+r to expand)
+
+⏺ Update Todos
+  ⎿  ☒ Search for papers discussing 'attention mechanisms'
+
+⏺ Found 164 papers discussing 'attention mechanisms'. Here are some notable titles:
+
+  - VLM-3R: Vision-Language Models Augmented (2505.20279v2.txt)
+  - OpenS2V-Nexus: A Detailed Benchmark and Million-Scale Dataset for Subject-to-Video 
+  Generation (2505.20292v4.txt)
+  - Enhancing the Comprehensibility of Text Explanations via Unsupervised Concept 
+  Discovery (2505.20293v1.txt)
+  - RetroMotion: Retrocausal Motion Forecasting Models are Instructable
+  (2505.20414v1.txt)
+  - GraphGen: Enhancing Supervised Fine-Tuning for LLMs with Knowledge-Driven Synthetic
+   Data Generation (2505.20416v1.txt)
+  - HAMburger: Accelerating LLM Inference via Token Smashing (2505.20438v1.txt)
+  - HoPE: Hybrid of Position Embedding for Length Generalization in Vision-Language 
+  Models (2505.20444v1.txt)
+  - BlastOFormer: Attention and Neural Operator Deep Learning Methods for Explosive 
+  Blast Prediction (2505.20454v1.txt)
+  - WeatherEdit: Controllable Weather Editing with 4D Gaussian Field (2505.20471v3.txt)
+
+  The papers span various domains including vision-language models, motion forecasting,
+   LLM optimization, and neural operators, showing the widespread application of
+  attention mechanisms across AI research.
+
+
+Total cost:            $0.1038
+Total duration (API):  33.5s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  2.2k input, 215 output, 0 cache read, 0 cache write
+       claude-sonnet:  33 input, 988 output, 115.6k cache read, 13.8k cache write
+```

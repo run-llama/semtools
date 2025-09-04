@@ -1,0 +1,43 @@
+4. "Count all papers with 'v2' in their filename" (exact match - file pattern)
+
+With `search`:
+```bash
+> Count all papers with 'v2' in their filename
+
+⏺ I'll count all papers with 'v2' in their filename by searching
+  through the file structure.
+
+⏺ Bash(find . -name "*v2*" -type f | wc -l)
+  ⎿  107
+
+⏺ 107
+
+
+Total cost:            $0.0196
+Total duration (API):  8.7s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  517 input, 73 output, 0 cache read, 0 cache write
+       claude-sonnet:  11 input, 120 output, 31.0k cache read, 2.1k cache write
+```
+
+Without `search`:
+```bash
+> Count all papers with 'v2' in their filename
+
+⏺ I'll count all papers with 'v2' in their filename across the
+  dataset.
+
+⏺ Bash(find . -name "*v2*" -type f | wc -l)
+  ⎿  107
+
+⏺ 107
+
+
+Total cost:            $0.0272
+Total duration (API):  7.5s
+Total code changes:    0 lines added, 0 lines removed
+Usage by model:
+    claude-3-5-haiku:  407 input, 58 output, 0 cache read, 0 cache write
+       claude-sonnet:  11 input, 117 output, 27.2k cache read, 4.4k cache write
+```
