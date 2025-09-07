@@ -11,7 +11,7 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 ## Key Features
 
-- **Fast semantic search** using model2vec embeddings, without the burden of a vector database
+- **Fast semantic search** using model2vec embeddings from [minishlab/potion-multilingual-128M](https://huggingface.co/minishlab/potion-multilingual-128M)
 - **Reliable document parsing** with caching and error handling  
 - **Unix-friendly** design with proper stdin/stdout handling
 - **Configurable** distance thresholds and returned chunk sizes
@@ -22,7 +22,6 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 Prerequisites:
 
-- [Rust + Cargo](https://www.rust-lang.org/tools/install)
 - For the `parse` tool: LlamaIndex Cloud API key
 
 Install:
@@ -163,7 +162,8 @@ export LLAMA_CLOUD_API_KEY="your_api_key_here"
 ## Future Work
 
 - [ ] More parsing backends (something local-only would be great!)
-- [ ] Allowing model selection for the search tool
+- [ ] Improved search algorithms
+- [ ] (optional) Persistence for speedups on repeat searches on the same files 
 
 ## Contributing
 
@@ -177,4 +177,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [LlamaIndex/LlamaParse](https://cloud.llamaindex.ai/) for document parsing capabilities
 - [model2vec-rs](https://github.com/MinishLab/model2vec-rs)for fast embedding generation
-- [simsimd](https://github.com/ashvardanian/simsimd) for efficient similarity computation 
+- [minishlab/potion-multilingual-128M](https://huggingface.co/minishlab/potion-multilingual-128M) for an amazing default static embedding model 
+- [simsimd](https://github.com/ashvardanian/simsimd) for efficient similarity computation
