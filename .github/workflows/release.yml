@@ -171,3 +171,41 @@ jobs:
       run: |
         echo "✅ SemTools crate published successfully!"
         echo "Users can now install with: cargo install semtools"
+
+  publish-npm:
+    name: Publish to npm
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Verify version consistency (npm)
+      run: |
+        TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
+        PKG_VERSION=$(jq -r '.version' package.json)
+        echo "Tag version: $TAG_VERSION"
+        echo "package.json version: $PKG_VERSION"
+        if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+          echo "❌ Version mismatch detected!"
+          echo "package.json version must match the git tag"
+          exit 1
+        fi
+        echo "✅ Version is synchronized"
+
+    - name: Publish package to npm
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        npm publish --access public
