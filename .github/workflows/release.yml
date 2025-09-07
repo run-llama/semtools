@@ -66,12 +66,9 @@ jobs:
         sudo apt-get install -y pkg-config libssl-dev
         case "${{ matrix.target }}" in
           aarch64-unknown-linux-gnu)
-            # Add arm64 architecture for cross-compilation packages
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update
-            sudo apt-get install -y gcc-aarch64-linux-gnu libssl-dev:arm64
-            # Configure cross-compilation for OpenSSL
-            echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+            # Use static OpenSSL linking to avoid cross-compilation issues
+            echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
             echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
             ;;
         esac
