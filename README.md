@@ -18,7 +18,7 @@ A collection of high-performance CLI tools for document processing and semantic 
 - **Multi-format support** for parsing documents (PDF, DOCX, PPTX, etc.)
 - **Concurrent processing** for better parsing performance
 
-## Quick Start
+## Installation
 
 Prerequisites:
 
@@ -26,6 +26,14 @@ Prerequisites:
 - For the `parse` tool: LlamaIndex Cloud API key
 
 Install:
+
+You can install `semtools` via npm:
+
+```bash
+npm i -g @llamaindex/semtools
+```
+
+Or via cargo:
 
 ```bash
 # install entire crate
@@ -37,6 +45,10 @@ cargo install semtools --no-default-features --features=parse
 # install only search
 cargo install semtools --no-default-features --features=search
 ```
+
+Note: Installing from npm builds the Rust binaries locally during install if a prebuilt binary is not available, which requires Rust and Cargo to be available in your environment. Install from `rustup` if needed: `https://www.rust-lang.org/tools/install`.
+
+## Quick Start
 
 Basic Usage:
 
