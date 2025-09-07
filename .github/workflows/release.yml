@@ -39,16 +39,20 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: semtools-linux-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: semtools-windows-x86_64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: semtools-macos-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: semtools-macos-aarch64
 
     steps:
     - name: Checkout code
@@ -58,6 +62,19 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
+
+    - name: Install cross toolchain dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        case "${{ matrix.target }}" in
+          aarch64-unknown-linux-gnu)
+            sudo apt-get install -y gcc-aarch64-linux-gnu ;;
+          x86_64-unknown-linux-musl)
+            sudo apt-get install -y musl-tools ;;
+          aarch64-unknown-linux-musl)
+            sudo apt-get install -y musl-tools ;;
+        esac
 
     - name: Cache cargo registry
       uses: actions/cache@v4
@@ -79,7 +96,7 @@ jobs:
         cp target/${{ matrix.target }}/release/search release/
         cp README.md release/ 2>/dev/null || echo "README.md not found"
         cd release
-        tar czf ../${{ matrix.artifact_name }}.tar.gz *
+        tar czf ../semtools-${{ matrix.target }}.tar.gz *
 
     - name: Create archive (Windows)
       if: runner.os == 'Windows'
@@ -89,14 +106,14 @@ jobs:
         copy target\${{ matrix.target }}\release\search.exe release\
         copy README.md release\ 2>nul || echo "README.md not found"
         cd release
-        7z a ..\${{ matrix.artifact_name }}.zip *
+        7z a ..\semtools-${{ matrix.target }}.zip *
 
     - name: Upload Release Asset (Unix)
       if: runner.os != 'Windows'
       uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
-        artifacts: ${{ matrix.artifact_name }}.tar.gz
+        artifacts: semtools-${{ matrix.target }}.tar.gz
         token: ${{ secrets.GITHUB_TOKEN }}
         omitBody: true
         omitName: true
@@ -106,7 +123,7 @@ jobs:
       uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
-        artifacts: ${{ matrix.artifact_name }}.zip
+        artifacts: semtools-${{ matrix.target }}.zip
         token: ${{ secrets.GITHUB_TOKEN }}
         omitBody: true
         omitName: true

@@ -1,0 +1,53 @@
+{
+  "name": "@llamaindex/semtools",
+  "version": "0.0.1",
+  "description": "Semantic search and document parsing tools for the command line (Rust-backed, npm-distributed)",
+  "license": "MIT",
+  "author": "LlamaIndex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/run-llama/semtools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/run-llama/semtools/issues"
+  },
+  "homepage": "https://github.com/run-llama/semtools#readme",
+  "bin": {
+    "parse": "cli/parse.js",
+    "search": "cli/search.js"
+  },
+  "main": "index.js",
+  "scripts": {
+    "install": "node scripts/install.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "index.js",
+    "cli/",
+    "scripts/",
+    "dist/",
+    "src/",
+    "Cargo.toml",
+    "Cargo.lock",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "llamaindex",
+    "semtools",
+    "semantic-search",
+    "document-parsing",
+    "cli",
+    "rust"
+  ],
+  "dependencies": {
+    "tar": "^6.2.1",
+    "unzipper": "^0.10.14"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
+
