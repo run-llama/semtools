@@ -165,3 +165,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [LlamaIndex/LlamaParse](https://cloud.llamaindex.ai/) for document parsing capabilities
 - [model2vec-rs](https://github.com/MinishLab/model2vec-rs)for fast embedding generation
 - [simsimd](https://github.com/ashvardanian/simsimd) for efficient similarity computation 
+
+## Secrets (SOPS + age)
+- Repo vault: `.secrets/dev.env.enc` (encrypted dotenv)
+- Helper: `scripts/secrets` — `pull|edit|import|doctor`
+- Global defaults (optional): `Smarty-Pants-Inc/secrets/global/workstation.env.enc` → `~/.config/smarty/global.env`
+
+Local
+- Edit repo vault: `scripts/secrets edit dev`
+- Merge + write `.env.local`: `make secrets.pull && make secrets.doctor`
+
+CI
+- Add repo Actions secret `SOPS_AGE_KEY` (age private key)
+- Use composite action: `uses: ./.github/actions/sops-setup` with `sops_age_key: ${{ secrets.SOPS_AGE_KEY }}`
+- This writes `~/.config/age/key.txt`, installs `sops`, decrypts `.secrets/dev.env.enc` → `.env.local`, and exports keys to `GITHUB_ENV` for subsequent steps.
