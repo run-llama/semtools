@@ -67,8 +67,7 @@ jobs:
         case "${{ matrix.target }}" in
           aarch64-unknown-linux-gnu)
             sudo apt-get install -y gcc-aarch64-linux-gnu
-            # Use static OpenSSL linking to avoid cross-compilation issues
-            echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+            # Configure cross-compilation environment
             echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
             ;;
         esac
@@ -83,7 +82,16 @@ jobs:
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build release binaries
-      run: cargo build --release --target ${{ matrix.target }}
+      run: |
+        case "${{ matrix.target }}" in
+          aarch64-unknown-linux-gnu)
+            # Use vendored OpenSSL for cross-compilation
+            OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cargo build --release --target ${{ matrix.target }}
+            ;;
+          *)
+            cargo build --release --target ${{ matrix.target }}
+            ;;
+        esac
 
     - name: Create archive (Unix)
       if: runner.os != 'Windows'

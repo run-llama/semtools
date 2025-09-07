@@ -78,8 +78,12 @@ function detectTargetTriple() {
 
   if (platform === 'linux') {
     const musl = detectMusl();
-    if (arch === 'x64') return musl ? 'x86_64-unknown-linux-musl' : 'x86_64-unknown-linux-gnu';
-    if (arch === 'arm64') return musl ? 'aarch64-unknown-linux-musl' : 'aarch64-unknown-linux-gnu';
+    if (musl) {
+        // TODO: support musl
+        return null;
+    }
+    if (arch === 'x64') return 'x86_64-unknown-linux-gnu';
+    if (arch === 'arm64') return 'aarch64-unknown-linux-gnu';
   } else if (platform === 'darwin') {
     if (arch === 'x64') return 'x86_64-apple-darwin';
     if (arch === 'arm64') return 'aarch64-apple-darwin';
