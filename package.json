@@ -1,6 +1,6 @@
 {
   "name": "@llamaindex/semtools",
-  "version": "0.0.1",
+  "version": "1.2.1",
   "description": "Semantic search and document parsing tools for the command line (Rust-backed, npm-distributed)",
   "license": "MIT",
   "author": "LlamaIndex",
@@ -43,8 +43,8 @@
     "rust"
   ],
   "dependencies": {
-    "tar": "^6.2.1",
-    "unzipper": "^0.10.14"
+    "tar": ">=6.2.1",
+    "unzipper": ">=0.10.14"
   },
   "publishConfig": {
     "access": "public"
