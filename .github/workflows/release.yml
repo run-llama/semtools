@@ -82,16 +82,10 @@ jobs:
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build release binaries
-      run: |
-        case "${{ matrix.target }}" in
-          aarch64-unknown-linux-gnu)
-            # Use vendored OpenSSL for cross-compilation
-            OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cargo build --release --target ${{ matrix.target }}
-            ;;
-          *)
-            cargo build --release --target ${{ matrix.target }}
-            ;;
-        esac
+      run: cargo build --release --target ${{ matrix.target }}
+      env:
+        OPENSSL_STATIC: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
+        OPENSSL_VENDORED: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
 
     - name: Create archive (Unix)
       if: runner.os != 'Windows'
