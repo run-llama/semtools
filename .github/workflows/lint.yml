@@ -31,6 +31,9 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Install protoc
+      uses: taiki-e/install-action@protoc
+
     - name: Run clippy
       run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
@@ -80,6 +83,9 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install protoc
+      uses: taiki-e/install-action@protoc
 
     - name: Check workspace
       run: cargo check --workspace --all-targets --all-features

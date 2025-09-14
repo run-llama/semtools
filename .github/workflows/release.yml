@@ -83,6 +83,9 @@ jobs:
           target
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Install protoc
+      uses: taiki-e/install-action@protoc
+
     - name: Build release binaries
       run: cargo build --release --target ${{ matrix.target }}
 
