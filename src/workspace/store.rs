@@ -914,7 +914,7 @@ mod tests {
             size_bytes: 100,
             mtime: 1000,
         };
-        let _initial_embedding = vec![vec![1.0, 2.0, 3.0, 4.0]];
+        let _initial_embedding = [vec![1.0, 2.0, 3.0, 4.0]];
 
         store
             .upsert_document_metadata(&[initial_doc])
@@ -934,7 +934,7 @@ mod tests {
             size_bytes: 200,
             mtime: 2000,
         };
-        let _updated_embedding = vec![vec![5.0, 6.0, 7.0, 8.0]];
+        let _updated_embedding = [vec![5.0, 6.0, 7.0, 8.0]];
 
         store
             .upsert_document_metadata(&[updated_doc])
