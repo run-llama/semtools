@@ -217,6 +217,27 @@ fn search_documents<'a>(
     }
 }
 
+fn perform_traditional_search(
+    files: &[String],
+    query_embedding: &[f32],
+    model: &StaticModel,
+    args: &Args,
+) -> Result<()> {
+    let mut documents = Vec::new();
+    for f in files {
+        let content = read_to_string(f)?;
+        if let Some(doc) =
+            create_document_from_content(f.clone(), &content, model, args.ignore_case)
+        {
+            documents.push(doc);
+        }
+    }
+
+    let search_results = search_documents(&documents, query_embedding, args);
+    print_search_results(&search_results);
+    Ok(())
+}
+
 // Extracted function to format and print results
 fn print_search_results(results: &[SearchResult]) {
     let is_tty = io::stdout().is_terminal();
@@ -320,23 +341,22 @@ fn main() -> Result<()> {
                         &doc_info.content,
                         &model,
                         args.ignore_case,
-                    ) {
-                        if !doc.embeddings.is_empty() {
-                            let dim = doc.embeddings[0].len();
-                            let mut sum = vec![0.0f32; dim];
-                            for e in &doc.embeddings {
-                                for (i, v) in e.iter().enumerate() {
-                                    sum[i] += *v;
-                                }
+                    ) && !doc.embeddings.is_empty()
+                    {
+                        let dim = doc.embeddings[0].len();
+                        let mut sum = vec![0.0f32; dim];
+                        for e in &doc.embeddings {
+                            for (i, v) in e.iter().enumerate() {
+                                sum[i] += *v;
                             }
-                            let count = doc.embeddings.len() as f32;
-                            for v in &mut sum {
-                                *v /= count;
-                            }
-
-                            docs_to_upsert.push(doc_info.meta.clone());
-                            doc_embeddings_to_upsert.push(sum);
                         }
+                        let count = doc.embeddings.len() as f32;
+                        for v in &mut sum {
+                            *v /= count;
+                        }
+
+                        docs_to_upsert.push(doc_info.meta.clone());
+                        doc_embeddings_to_upsert.push(sum);
                     }
                 }
                 DocumentState::Unchanged(_) => {
@@ -351,6 +371,7 @@ fn main() -> Result<()> {
         }
 
         // Step 4: Two-stage retrieval if we have many documents
+        // Use doc_top_k as threshold for when to apply ANN filtering
         let working_set_paths = if args.files.len() > ws.config.doc_top_k {
             // Stage 1: ANN filter to get top documents from workspace
             let candidates = rt
@@ -414,36 +435,12 @@ fn main() -> Result<()> {
         let search_results = search_documents(&documents, &query_embedding, &args);
         print_search_results(&search_results);
     } else {
-        // Non-workspace mode: traditional search
-        let mut documents = Vec::new();
-        for f in &args.files {
-            let content = read_to_string(f)?;
-            if let Some(doc) =
-                create_document_from_content(f.clone(), &content, &model, args.ignore_case)
-            {
-                documents.push(doc);
-            }
-        }
-
-        let search_results = search_documents(&documents, &query_embedding, &args);
-        print_search_results(&search_results);
+        perform_traditional_search(&args.files, &query_embedding, &model, &args)?;
     }
 
     #[cfg(not(feature = "workspace"))]
     {
-        // Non-workspace mode: traditional search
-        let mut documents = Vec::new();
-        for f in &args.files {
-            let content = read_to_string(f)?;
-            if let Some(doc) =
-                create_document_from_content(f.clone(), &content, &model, args.ignore_case)
-            {
-                documents.push(doc);
-            }
-        }
-
-        let search_results = search_documents(&documents, &query_embedding, &args);
-        print_search_results(&search_results);
+        perform_traditional_search(&args.files, &query_embedding, &model, &args)?;
     }
 
     Ok(())

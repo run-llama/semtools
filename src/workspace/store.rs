@@ -8,8 +8,9 @@ use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
 use lancedb::index::Index;
 use lancedb::query::{ExecutableQuery, QueryBase};
-use rand::Rng;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -22,8 +23,11 @@ pub struct DocMeta {
 
 impl DocMeta {
     pub fn id(&self) -> i32 {
-        // generate a random int32 id for the document
-        rand::thread_rng().gen_range(0..i32::MAX)
+        // Generate deterministic ID based on path hash for consistent upserts
+        let mut hasher = DefaultHasher::new();
+        self.path.hash(&mut hasher);
+        // Use absolute value to ensure positive ID, avoid i32::MIN edge case
+        (hasher.finish() as i32).abs().max(1)
     }
 }
 
@@ -315,6 +319,14 @@ impl Store {
                         eprintln!(
                             "Warning: Skipping vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search."
                         );
+                    } else if error_msg.contains("No space left on device") {
+                        return Err(anyhow!(
+                            "Insufficient disk space to create vector index. Consider freeing up space or using a different workspace location."
+                        ));
+                    } else if error_msg.contains("Permission denied") {
+                        return Err(anyhow!(
+                            "Permission denied while creating vector index. Check workspace directory permissions."
+                        ));
                     } else {
                         // For other errors, we should still fail
                         return Err(e.into());
