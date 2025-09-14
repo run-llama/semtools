@@ -92,6 +92,7 @@ jobs:
         mkdir -p release
         cp target/${{ matrix.target }}/release/parse release/
         cp target/${{ matrix.target }}/release/search release/
+        cp target/${{ matrix.target }}/release/workspace release/
         cp README.md release/ 2>/dev/null || echo "README.md not found"
         cd release
         tar czf ../semtools-${{ matrix.target }}.tar.gz *
@@ -102,6 +103,7 @@ jobs:
         mkdir release
         copy target\${{ matrix.target }}\release\parse.exe release\
         copy target\${{ matrix.target }}\release\search.exe release\
+        copy target\${{ matrix.target }}\release\workspace.exe release\
         copy README.md release\ 2>nul || echo "README.md not found"
         cd release
         7z a ..\semtools-${{ matrix.target }}.zip *

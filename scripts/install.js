@@ -36,6 +36,7 @@ function placeBinaries() {
 
   const builtParse = join(__dirname, '..', 'target', 'release', `parse${exe}`);
   const builtSearch = join(__dirname, '..', 'target', 'release', `search${exe}`);
+  const builtWorkspace = join(__dirname, '..', 'target', 'release', `workspace${exe}`);
 
   const destDir = join(__dirname, '..', 'dist', 'bin');
   mkdirSync(destDir, { recursive: true });
@@ -56,8 +57,15 @@ function placeBinaries() {
     anyPlaced = true;
   }
 
+  if (existsSync(builtWorkspace)) {
+    const dest = join(destDir, `workspace${exe}`);
+    copyFileSync(builtWorkspace, dest);
+    try { chmodSync(dest, 0o755); } catch {}
+    anyPlaced = true;
+  }
+
   if (!anyPlaced) {
-    fail('No binaries were produced. Expected to find target/release/parse and/or target/release/search.');
+    fail('No binaries were produced. Expected to find target/release/parse, target/release/search, and/or target/release/workspace.');
   }
 }
 
@@ -146,6 +154,7 @@ async function tryDownloadPrebuilt() {
     // Ensure executables
     try { chmodSync(join(distBin, 'parse'), 0o755); } catch {}
     try { chmodSync(join(distBin, 'search'), 0o755); } catch {}
+    try { chmodSync(join(distBin, 'workspace'), 0o755); } catch {}
     return true;
   } catch (e) {
     console.warn(`@llamaindex/semtools: failed to extract prebuilt: ${e.message}`);
