@@ -787,13 +787,28 @@ mod tests {
     #[tokio::test]
     async fn test_upsert_documents_and_stats() {
         let (store, _temp_dir) = create_test_store().await;
-        let (docs, _embeddings) = create_test_docs();
+        let (docs, embeddings) = create_test_docs();
 
         // Insert documents
         store
             .upsert_document_metadata(&docs)
             .await
             .expect("Failed to upsert documents");
+
+        let line_embeddings: Vec<LineEmbedding> = docs
+            .iter()
+            .enumerate()
+            .map(|(i, doc)| LineEmbedding {
+                path: doc.path.clone(),
+                line_number: i as i32,
+                embedding: embeddings[i].clone(),
+            })
+            .collect();
+
+        store
+            .upsert_line_embeddings(&line_embeddings)
+            .await
+            .expect("Failed to upsert line embeddings");
 
         // Check stats
         let stats = store.get_stats().await.expect("Failed to get stats");
