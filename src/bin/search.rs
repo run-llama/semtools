@@ -784,11 +784,10 @@ mod tests {
             assert_eq!(states.len(), 3);
 
             for state in &states {
-                match state {
-                    DocumentState::Unchanged(filename) => {
-                        assert!(file_paths.contains(filename));
-                    }
-                    _ => panic!("Expected Unchanged document state"),
+                if let DocumentState::Unchanged(filename) = state {
+                    assert!(file_paths.contains(filename));
+                } else {
+                    panic!("Expected Unchanged document state");
                 }
             }
         }
@@ -822,12 +821,11 @@ mod tests {
             assert_eq!(states.len(), 3);
 
             for state in &states {
-                match state {
-                    DocumentState::Changed(doc_info) => {
-                        assert!(file_paths.contains(&doc_info.filename));
-                        assert!(!doc_info.content.is_empty());
-                    }
-                    _ => panic!("Expected Changed document state"),
+                if let DocumentState::Changed(doc_info) = state {
+                    assert!(file_paths.contains(&doc_info.filename));
+                    assert!(!doc_info.content.is_empty());
+                } else {
+                    panic!("Expected Changed document state");
                 }
             }
         }
@@ -904,11 +902,8 @@ mod tests {
             assert_eq!(states.len(), 3);
 
             for state in &states {
-                match state {
-                    DocumentState::New(doc_info) => {
-                        assert_ne!(doc_info.filename, "/nonexistent/file.txt");
-                    }
-                    _ => {}
+                if let DocumentState::New(doc_info) = state {
+                    assert_ne!(doc_info.filename, "/nonexistent/file.txt");
                 }
             }
         }
