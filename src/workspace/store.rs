@@ -21,6 +21,13 @@ pub struct DocMeta {
     pub mtime: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct LineEmbedding {
+    pub path: String,
+    pub line_number: i32,
+    pub embedding: Vec<f32>,
+}
+
 impl DocMeta {
     pub fn id(&self) -> i32 {
         // Generate deterministic ID based on path hash for consistent upserts
@@ -31,9 +38,21 @@ impl DocMeta {
     }
 }
 
+impl LineEmbedding {
+    pub fn id(&self) -> i32 {
+        // Generate deterministic ID based on path + line number for consistent upserts
+        let mut hasher = DefaultHasher::new();
+        self.path.hash(&mut hasher);
+        self.line_number.hash(&mut hasher);
+        // Use absolute value to ensure positive ID, avoid i32::MIN edge case
+        (hasher.finish() as i32).abs().max(1)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct RankedDoc {
+pub struct RankedLine {
     pub path: String,
+    pub line_number: i32,
     pub distance: f32,
 }
 
@@ -148,8 +167,21 @@ impl Store {
         Ok(existing)
     }
 
-    /// Delete documents by path
+    /// Delete documents and all associated line embeddings by path
     pub async fn delete_documents(&self, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+
+        // Delete from both tables to maintain synchronization
+        self.delete_document_metadata(paths).await?;
+        self.delete_line_embeddings(paths).await?;
+
+        Ok(())
+    }
+
+    /// Delete only document metadata by path (internal method)
+    async fn delete_document_metadata(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }
@@ -182,44 +214,56 @@ impl Store {
         Ok(())
     }
 
-    pub async fn upsert_documents(&self, metas: &[DocMeta], embeddings: &[Vec<f32>]) -> Result<()> {
-        // Validate inputs
-        if metas.len() != embeddings.len() {
-            bail!(
-                "metas and embeddings length mismatch: {} vs {}",
-                metas.len(),
-                embeddings.len()
-            );
+    /// Delete line embeddings by path
+    pub async fn delete_line_embeddings(&self, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
         }
-        if embeddings.is_empty() {
-            return Ok(()); // nothing to do
+
+        let tables = self
+            .db
+            .table_names()
+            .execute()
+            .await
+            .context("failed to list LanceDB tables")?;
+        if !tables.contains(&"line_embeddings".to_string()) {
+            return Ok(()); // Nothing to delete
         }
-        let dim = embeddings[0].len();
-        if dim == 0 {
-            bail!("embeddings must be non-empty vectors");
+
+        let tbl = self
+            .db
+            .open_table("line_embeddings")
+            .execute()
+            .await
+            .context("failed to open 'line_embeddings' table")?;
+
+        // Delete in chunks
+        for chunk in paths.chunks(1000) {
+            let filter_expr = build_in_filter(chunk);
+            tbl.delete(&filter_expr).await.with_context(|| {
+                format!("failed to delete line embeddings with filter: {filter_expr}")
+            })?;
         }
-        if embeddings.iter().any(|e| e.len() != dim) {
-            bail!("all embeddings must have equal length");
+
+        Ok(())
+    }
+
+    /// Upsert document metadata for tracking file changes (no embeddings stored)
+    pub async fn upsert_document_metadata(&self, metas: &[DocMeta]) -> Result<()> {
+        if metas.is_empty() {
+            return Ok(());
         }
 
         // First, delete any existing documents with the same paths
         let paths: Vec<String> = metas.iter().map(|m| m.path.clone()).collect();
-        self.delete_documents(&paths).await?;
+        self.delete_document_metadata(&paths).await?;
 
-        // Define schema
+        // Define schema for metadata only
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("path", DataType::Utf8, false),
             Field::new("size_bytes", DataType::UInt64, false),
             Field::new("mtime", DataType::Int64, false),
-            Field::new(
-                "vector",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Float32, true)),
-                    dim as i32,
-                ),
-                true,
-            ),
         ]));
 
         // Build a single RecordBatch
@@ -228,12 +272,6 @@ impl Store {
             StringArray::from(metas.iter().map(|m| m.path.as_str()).collect::<Vec<_>>());
         let size_bytes_array = UInt64Array::from_iter_values(metas.iter().map(|m| m.size_bytes));
         let mtime_array = Int64Array::from_iter_values(metas.iter().map(|m| m.mtime));
-        let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-            embeddings
-                .iter()
-                .map(|embedding| Some(embedding.iter().cloned().map(Some))),
-            dim as i32,
-        );
 
         let batch = RecordBatch::try_new(
             schema.clone(),
@@ -242,7 +280,6 @@ impl Store {
                 Arc::new(path_array),
                 Arc::new(size_bytes_array),
                 Arc::new(mtime_array),
-                Arc::new(vector_array),
             ],
         )?;
 
@@ -278,26 +315,121 @@ impl Store {
                 .context("failed to append batches to 'documents' table")?;
         }
 
-        // Handle index creation/optimization after data is added
-        self.ensure_vector_index().await?;
+        Ok(())
+    }
+
+    /// Upsert line-level embeddings for documents
+    pub async fn upsert_line_embeddings(&self, line_embeddings: &[LineEmbedding]) -> Result<()> {
+        if line_embeddings.is_empty() {
+            return Ok(());
+        }
+
+        let dim = line_embeddings[0].embedding.len();
+        if dim == 0 {
+            bail!("embeddings must be non-empty vectors");
+        }
+        if line_embeddings.iter().any(|e| e.embedding.len() != dim) {
+            bail!("all embeddings must have equal length");
+        }
+
+        // First, delete any existing lines with the same paths
+        let paths: Vec<String> = line_embeddings.iter().map(|le| le.path.clone()).collect();
+        let unique_paths: std::collections::HashSet<String> = paths.into_iter().collect();
+        let unique_paths: Vec<String> = unique_paths.into_iter().collect();
+        self.delete_line_embeddings(&unique_paths).await?;
+
+        // Define schema for line embeddings
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("path", DataType::Utf8, false),
+            Field::new("line_number", DataType::Int32, false),
+            Field::new(
+                "vector",
+                DataType::FixedSizeList(
+                    Arc::new(Field::new("item", DataType::Float32, true)),
+                    dim as i32,
+                ),
+                true,
+            ),
+        ]));
+
+        // Build RecordBatch
+        let id_array = Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.id()));
+        let path_array = StringArray::from(
+            line_embeddings
+                .iter()
+                .map(|le| le.path.as_str())
+                .collect::<Vec<_>>(),
+        );
+        let line_number_array =
+            Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.line_number));
+        let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            line_embeddings
+                .iter()
+                .map(|le| Some(le.embedding.iter().cloned().map(Some))),
+            dim as i32,
+        );
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(id_array),
+                Arc::new(path_array),
+                Arc::new(line_number_array),
+                Arc::new(vector_array),
+            ],
+        )?;
+
+        let batches = RecordBatchIterator::new(vec![batch].into_iter().map(Ok), schema.clone());
+
+        // Create or append to line_embeddings table
+        let tables = self
+            .db
+            .table_names()
+            .execute()
+            .await
+            .context("failed to list LanceDB tables")?;
+        let table_existed = tables.contains(&"line_embeddings".to_string());
+
+        if !table_existed {
+            self.db
+                .create_table("line_embeddings", Box::new(batches))
+                .execute()
+                .await
+                .context("failed to create 'line_embeddings' table")?;
+        } else {
+            let tbl = self
+                .db
+                .open_table("line_embeddings")
+                .execute()
+                .await
+                .context("failed to open 'line_embeddings' table")?;
+            tbl.add(Box::new(batches))
+                .execute()
+                .await
+                .context("failed to append batches to 'line_embeddings' table")?;
+        }
+
+        // Ensure vector index exists
+        self.ensure_line_vector_index().await?;
 
         Ok(())
     }
 
-    /// Ensures vector index exists and is optimized for current data size
-    async fn ensure_vector_index(&self) -> Result<()> {
+    /// Ensures vector index exists for line embeddings table
+    async fn ensure_line_vector_index(&self) -> Result<()> {
         let tbl = self
             .db
-            .open_table("documents")
+            .open_table("line_embeddings")
             .execute()
             .await
-            .context("failed to open 'documents' table")?;
+            .context("failed to open 'line_embeddings' table")?;
 
         // Check if vector index exists
         let indices = tbl
             .list_indices()
             .await
-            .context("failed to list indices for 'documents' table")?;
+            .context("failed to list indices for 'line_embeddings' table")?;
         let has_vector_index = indices
             .iter()
             .any(|idx| idx.columns.contains(&"vector".to_string()));
@@ -317,7 +449,7 @@ impl Store {
                         // Log a warning but continue - the database will still work without the index
                         // It will just use brute-force search instead of approximate search
                         eprintln!(
-                            "Warning: Skipping vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search."
+                            "Warning: Skipping line embeddings vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search."
                         );
                     } else if error_msg.contains("No space left on device") {
                         return Err(anyhow!(
@@ -339,7 +471,7 @@ impl Store {
             if tbl.optimize(Default::default()).await.is_err() {
                 // If optimization fails, we could fall back to recreating the index
                 // but for now just log and continue
-                eprintln!("Warning: Failed to optimize vector index");
+                eprintln!("Warning: Failed to optimize line embeddings vector index");
             }
         }
 
@@ -383,10 +515,16 @@ impl Store {
         let total_documents = batches.iter().map(|batch| batch.num_rows()).sum();
 
         // Check if vector index exists
-        let indices = tbl
+        let line_tbl = self
+            .db
+            .open_table("line_embeddings")
+            .execute()
+            .await
+            .context("failed to open 'line_embeddings' table")?;
+        let indices = line_tbl
             .list_indices()
             .await
-            .context("failed to list indices for 'documents' table")?;
+            .context("failed to list indices for 'line_embeddings' table")?;
         let has_vector_index = indices
             .iter()
             .any(|idx| idx.columns.contains(&"vector".to_string()));
@@ -454,152 +592,132 @@ impl Store {
         Ok(paths)
     }
 
-    pub async fn ann_filter_top_k(
+    /// Search line embeddings directly for precise results
+    pub async fn search_line_embeddings(
         &self,
         query_vec: &[f32],
         subset_paths: &[String],
-        doc_top_k: usize,
-        in_batch_size: usize,
-    ) -> Result<Vec<RankedDoc>> {
-        // Use good default parameters for balanced recall/latency
-        // refine_factor=5: improves recall by re-ranking more candidates
-        // nprobes=10: searches more index partitions for better recall
-        self.ann_filter_top_k_with_params(
-            query_vec,
-            subset_paths,
-            doc_top_k,
-            in_batch_size,
-            Some(5),
-            Some(10),
-        )
-        .await
-    }
-
-    /// ANN search with configurable search parameters for recall/latency tradeoff
-    pub async fn ann_filter_top_k_with_params(
-        &self,
-        query_vec: &[f32],
-        subset_paths: &[String],
-        doc_top_k: usize,
-        in_batch_size: usize,
-        refine_factor: Option<u32>,
-        nprobes: Option<u32>,
-    ) -> Result<Vec<RankedDoc>> {
+        top_k: usize,
+        max_distance: Option<f32>,
+    ) -> Result<Vec<RankedLine>> {
         // Short-circuit on empty subsets
-        if subset_paths.is_empty() || doc_top_k == 0 {
+        if subset_paths.is_empty() || top_k == 0 {
+            return Ok(Vec::new());
+        }
+
+        let tables = self
+            .db
+            .table_names()
+            .execute()
+            .await
+            .context("failed to list LanceDB tables")?;
+        if !tables.contains(&"line_embeddings".to_string()) {
             return Ok(Vec::new());
         }
 
         let tbl = self
             .db
-            .open_table("documents")
+            .open_table("line_embeddings")
             .execute()
             .await
-            .context("failed to open 'documents' table")?;
+            .context("failed to open 'line_embeddings' table")?;
 
-        // Aggregate best (lowest) distance per path across batches
-        let mut best_by_path: HashMap<String, f32> = HashMap::new();
+        let mut all_results = Vec::new();
 
-        // Chunk the subset paths to avoid overly long IN(...) filters
-        for chunk in subset_paths.chunks(in_batch_size.max(1)) {
+        // Search in chunks to avoid overly long IN(...) filters
+        for chunk in subset_paths.chunks(1000) {
             let filter_expr = build_in_filter(chunk);
 
-            let mut query = tbl
+            let query = tbl
                 .query()
                 .only_if(filter_expr)
                 .nearest_to(query_vec)
-                .context("failed to set nearest_to on query")?
+                .context("failed to set nearest_to on line embeddings query")?
                 .distance_type(lancedb::DistanceType::Cosine)
-                .limit(doc_top_k);
-
-            // Apply search parameters for better recall/latency control
-            if let Some(rf) = refine_factor {
-                query = query.refine_factor(rf);
-            }
-            if let Some(np) = nprobes {
-                query = query.nprobes(np as usize);
-            }
+                .limit(top_k * 2); // Get more results per chunk to improve global ranking
 
             let stream = query
                 .execute()
                 .await
-                .context("failed to execute ANN query batch")?;
+                .context("failed to execute line embeddings search")?;
 
             let batches: Vec<RecordBatch> = stream
                 .try_collect()
                 .await
-                .context("failed to collect ANN query batches")?;
+                .context("failed to collect line embeddings search batches")?;
 
             for batch in batches {
                 let schema = batch.schema();
 
-                // Locate indices for path and distance columns dynamically
                 let path_idx = schema
                     .index_of("path")
-                    .context("missing 'path' column in ANN result schema")?;
+                    .context("missing 'path' column in line embeddings result")?;
+                let line_number_idx = schema
+                    .index_of("line_number")
+                    .context("missing 'line_number' column in line embeddings result")?;
                 let distance_idx = schema
                     .index_of("_distance")
                     .or_else(|_| schema.index_of("distance"))
-                    .context("missing 'distance' column in ANN result schema")?;
+                    .context("missing 'distance' column in line embeddings result")?;
 
-                let path_col = batch.column(path_idx);
-                let dist_col = batch.column(distance_idx);
-
-                let path_array = path_col
+                let path_array = batch
+                    .column(path_idx)
                     .as_any()
                     .downcast_ref::<StringArray>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'path' column in ANN result"))?;
+                    .ok_or_else(|| anyhow!("unexpected type for 'path' column"))?;
+                let line_number_array = batch
+                    .column(line_number_idx)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or_else(|| anyhow!("unexpected type for 'line_number' column"))?;
+                let dist_col = batch.column(distance_idx);
 
-                // Distance may be f32 or f64 depending on engine; handle both
+                // Handle both f32 and f64 distance types
                 if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float32Array>() {
                     for i in 0..batch.num_rows() {
-                        let path = path_array.value(i).to_string();
                         let distance = dist_array.value(i);
-                        match best_by_path.get_mut(&path) {
-                            Some(existing) => {
-                                if distance < *existing {
-                                    *existing = distance;
-                                }
-                            }
-                            None => {
-                                best_by_path.insert(path, distance);
-                            }
+                        if let Some(max_dist) = max_distance
+                            && distance > max_dist
+                        {
+                            continue;
                         }
+
+                        all_results.push(RankedLine {
+                            path: path_array.value(i).to_string(),
+                            line_number: line_number_array.value(i),
+                            distance,
+                        });
                     }
                 } else if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float64Array>() {
                     for i in 0..batch.num_rows() {
-                        let path = path_array.value(i).to_string();
-                        let distance_f32 = dist_array.value(i) as f32;
-                        match best_by_path.get_mut(&path) {
-                            Some(existing) => {
-                                if distance_f32 < *existing {
-                                    *existing = distance_f32;
-                                }
-                            }
-                            None => {
-                                best_by_path.insert(path, distance_f32);
-                            }
+                        let distance = dist_array.value(i) as f32;
+                        if let Some(max_dist) = max_distance
+                            && distance > max_dist
+                        {
+                            continue;
                         }
+
+                        all_results.push(RankedLine {
+                            path: path_array.value(i).to_string(),
+                            line_number: line_number_array.value(i),
+                            distance,
+                        });
                     }
                 } else {
-                    bail!("unsupported distance column type");
+                    bail!("unsupported distance column type in line embeddings search");
                 }
             }
         }
 
-        // Collect, sort by distance, and take global top-k
-        let mut ranked: Vec<RankedDoc> = best_by_path
-            .into_iter()
-            .map(|(path, distance)| RankedDoc { path, distance })
-            .collect();
-        ranked.sort_by(|a, b| {
+        // Sort by distance and take global top-k
+        all_results.sort_by(|a, b| {
             a.distance
                 .partial_cmp(&b.distance)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        ranked.truncate(doc_top_k);
+        all_results.truncate(top_k);
 
-        Ok(ranked)
+        Ok(all_results)
     }
 }
 
@@ -673,9 +791,24 @@ mod tests {
 
         // Insert documents
         store
-            .upsert_documents(&docs, &embeddings)
+            .upsert_document_metadata(&docs)
             .await
             .expect("Failed to upsert documents");
+
+        let line_embeddings: Vec<LineEmbedding> = docs
+            .iter()
+            .enumerate()
+            .map(|(i, doc)| LineEmbedding {
+                path: doc.path.clone(),
+                line_number: i as i32,
+                embedding: embeddings[i].clone(),
+            })
+            .collect();
+
+        store
+            .upsert_line_embeddings(&line_embeddings)
+            .await
+            .expect("Failed to upsert line embeddings");
 
         // Check stats
         let stats = store.get_stats().await.expect("Failed to get stats");
@@ -691,7 +824,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_all_document_paths() {
         let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
+        let (docs, _embeddings) = create_test_docs();
 
         // Initially should be empty
         let paths = store
@@ -702,7 +835,7 @@ mod tests {
 
         // Insert documents
         store
-            .upsert_documents(&docs, &embeddings)
+            .upsert_document_metadata(&docs)
             .await
             .expect("Failed to upsert documents");
 
@@ -721,11 +854,11 @@ mod tests {
     #[tokio::test]
     async fn test_get_existing_docs() {
         let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
+        let (docs, _embeddings) = create_test_docs();
 
         // Insert documents
         store
-            .upsert_documents(&docs, &embeddings)
+            .upsert_document_metadata(&docs)
             .await
             .expect("Failed to upsert documents");
 
@@ -755,11 +888,11 @@ mod tests {
     #[tokio::test]
     async fn test_delete_documents() {
         let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
+        let (docs, _embeddings) = create_test_docs();
 
         // Insert documents
         store
-            .upsert_documents(&docs, &embeddings)
+            .upsert_document_metadata(&docs)
             .await
             .expect("Failed to upsert documents");
 
@@ -787,69 +920,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ann_filter_top_k() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
-
-        // Insert documents
-        store
-            .upsert_documents(&docs, &embeddings)
-            .await
-            .expect("Failed to upsert documents");
-
-        // Test ANN search
-        let query_vec = vec![0.2, 0.3, 0.4, 0.5];
-        let subset_paths = vec![
-            "/test/doc1.txt".to_string(),
-            "/test/doc2.txt".to_string(),
-            "/test/doc3.txt".to_string(),
-        ];
-
-        let results = store
-            .ann_filter_top_k(&query_vec, &subset_paths, 2, 1000)
-            .await
-            .expect("Failed to perform ANN search");
-
-        // Should return results (exact ranking depends on embeddings)
-        assert!(!results.is_empty());
-        assert!(results.len() <= 2);
-
-        // Results should be sorted by distance
-        for i in 1..results.len() {
-            assert!(results[i - 1].distance <= results[i].distance);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_ann_filter_top_k_with_custom_params() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
-
-        // Insert documents
-        store
-            .upsert_documents(&docs, &embeddings)
-            .await
-            .expect("Failed to upsert documents");
-
-        // Test ANN search with custom parameters
-        let query_vec = vec![0.2, 0.3, 0.4, 0.5];
-        let subset_paths = vec![
-            "/test/doc1.txt".to_string(),
-            "/test/doc2.txt".to_string(),
-            "/test/doc3.txt".to_string(),
-        ];
-
-        let results = store
-            .ann_filter_top_k_with_params(&query_vec, &subset_paths, 2, 1000, Some(3), Some(5))
-            .await
-            .expect("Failed to perform ANN search with custom params");
-
-        // Should return results
-        assert!(!results.is_empty());
-        assert!(results.len() <= 2);
-    }
-
-    #[tokio::test]
     async fn test_upsert_replaces_existing() {
         let (store, _temp_dir) = create_test_store().await;
 
@@ -859,10 +929,10 @@ mod tests {
             size_bytes: 100,
             mtime: 1000,
         };
-        let initial_embedding = vec![vec![1.0, 2.0, 3.0, 4.0]];
+        let _initial_embedding = [vec![1.0, 2.0, 3.0, 4.0]];
 
         store
-            .upsert_documents(&[initial_doc], &initial_embedding)
+            .upsert_document_metadata(&[initial_doc])
             .await
             .expect("Failed to insert initial document");
 
@@ -879,10 +949,10 @@ mod tests {
             size_bytes: 200,
             mtime: 2000,
         };
-        let updated_embedding = vec![vec![5.0, 6.0, 7.0, 8.0]];
+        let _updated_embedding = [vec![5.0, 6.0, 7.0, 8.0]];
 
         store
-            .upsert_documents(&[updated_doc], &updated_embedding)
+            .upsert_document_metadata(&[updated_doc])
             .await
             .expect("Failed to update document");
 

@@ -3,14 +3,13 @@ use clap::Parser;
 use model2vec_rs::model::StaticModel;
 use simsimd::SpatialSimilarity;
 use std::cmp::{max, min};
-use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::io::{self, BufRead, IsTerminal};
 
 #[cfg(feature = "workspace")]
 use semtools::workspace::{
     Workspace,
-    store::{DocMeta, Store},
+    store::{DocMeta, LineEmbedding, RankedLine, Store},
 };
 
 const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
@@ -269,6 +268,52 @@ fn print_search_results(results: &[SearchResult]) {
     }
 }
 
+#[cfg(feature = "workspace")]
+fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
+    let is_tty = io::stdout().is_terminal();
+
+    for ranked_line in ranked_lines {
+        let filename = &ranked_line.path;
+        let distance = ranked_line.distance;
+        let match_line_number = ranked_line.line_number as usize;
+
+        // Calculate context range
+        let start = match_line_number.saturating_sub(n_lines);
+        let end = match_line_number + n_lines + 1;
+
+        println!("{filename}:{start}::{end} ({distance})");
+
+        // For workspace results, we need to read the file to get context lines
+        // This is acceptable since we're only doing this for the final results
+        if let Ok(content) = std::fs::read_to_string(filename) {
+            let lines: Vec<&str> = content.lines().collect();
+            let actual_start = start.min(lines.len().saturating_sub(1));
+            let actual_end = end.min(lines.len());
+
+            for (i, line) in lines[actual_start..actual_end].iter().enumerate() {
+                let line_number = actual_start + i;
+
+                if line_number == match_line_number {
+                    if is_tty {
+                        // Highlight the matching line with yellow background and black text
+                        println!("\x1b[43m\x1b[30m{:4}: {}\x1b[0m", line_number + 1, line);
+                    } else {
+                        println!("{:4}: {}", line_number + 1, line);
+                    }
+                } else {
+                    // Regular context line
+                    println!("{:4}: {}", line_number + 1, line);
+                }
+            }
+        } else {
+            // Fallback: indicate that the file couldn't be read
+            println!("    [Error: Could not read file content]");
+        }
+
+        println!(); // Empty line between results
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -320,7 +365,7 @@ fn main() -> Result<()> {
     // Handle file input with optional workspace integration
     #[cfg(feature = "workspace")]
     if Workspace::active().is_ok() {
-        // Workspace mode: implement two-stage retrieval
+        // Workspace mode: use persisted line embeddings for speed
         let ws = Workspace::open()?;
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         let store = rt.block_on(Store::open(&ws.config.root_dir))?;
@@ -329,34 +374,29 @@ fn main() -> Result<()> {
         let doc_states = rt.block_on(analyze_document_states(&args.files, &store))?;
 
         // Step 2: Process documents that need embedding updates
+        let mut line_embeddings_to_upsert = Vec::new();
         let mut docs_to_upsert = Vec::new();
-        let mut doc_embeddings_to_upsert = Vec::new();
 
         for state in &doc_states {
             match state {
                 DocumentState::Changed(doc_info) | DocumentState::New(doc_info) => {
-                    // Generate document-level embedding (average of line embeddings)
+                    // Generate line-by-line embeddings and store them
                     if let Some(doc) = create_document_from_content(
                         doc_info.filename.clone(),
                         &doc_info.content,
                         &model,
                         args.ignore_case,
-                    ) && !doc.embeddings.is_empty()
-                    {
-                        let dim = doc.embeddings[0].len();
-                        let mut sum = vec![0.0f32; dim];
-                        for e in &doc.embeddings {
-                            for (i, v) in e.iter().enumerate() {
-                                sum[i] += *v;
-                            }
+                    ) {
+                        // Create LineEmbedding entries for each line
+                        for (line_idx, embedding) in doc.embeddings.iter().enumerate() {
+                            line_embeddings_to_upsert.push(LineEmbedding {
+                                path: doc_info.filename.clone(),
+                                line_number: line_idx as i32,
+                                embedding: embedding.clone(),
+                            });
                         }
-                        let count = doc.embeddings.len() as f32;
-                        for v in &mut sum {
-                            *v /= count;
-                        }
-
+                        // Also track document metadata for change detection
                         docs_to_upsert.push(doc_info.meta.clone());
-                        doc_embeddings_to_upsert.push(sum);
                     }
                 }
                 DocumentState::Unchanged(_) => {
@@ -365,75 +405,27 @@ fn main() -> Result<()> {
             }
         }
 
-        // Step 3: Update workspace with new/changed documents
+        // Step 3: Update workspace with new/changed line embeddings
+        if !line_embeddings_to_upsert.is_empty() {
+            rt.block_on(store.upsert_line_embeddings(&line_embeddings_to_upsert))?;
+        }
+
+        // Also update document metadata for tracking changes
         if !docs_to_upsert.is_empty() {
-            rt.block_on(store.upsert_documents(&docs_to_upsert, &doc_embeddings_to_upsert))?;
+            rt.block_on(store.upsert_document_metadata(&docs_to_upsert))?;
         }
 
-        // Step 4: Two-stage retrieval if we have many documents
-        // Use doc_top_k as threshold for when to apply ANN filtering
-        let working_set_paths = if args.files.len() > ws.config.doc_top_k {
-            // Stage 1: ANN filter to get top documents from workspace
-            let candidates = rt
-                .block_on(store.ann_filter_top_k(
-                    &query_embedding,
-                    &args.files,
-                    ws.config.doc_top_k,
-                    ws.config.in_batch_size,
-                ))
-                .unwrap_or_default();
-            candidates.into_iter().map(|r| r.path).collect()
-        } else {
-            // Small dataset - use all files
-            args.files.clone()
-        };
+        // Step 4: Search line embeddings directly from the workspace
+        let max_distance = args.max_distance.map(|d| d as f32);
+        let ranked_lines = rt.block_on(store.search_line_embeddings(
+            &query_embedding,
+            &args.files,
+            args.top_k,
+            max_distance,
+        ))?;
 
-        // Step 5: Generate line-by-line embeddings only for working set
-        // Reuse already-read content for Changed/New docs to avoid double reads
-        let mut content_cache: HashMap<&str, &str> = HashMap::new();
-        let mut owned_content_cache: HashMap<String, String> = HashMap::new();
-
-        for state in &doc_states {
-            match state {
-                DocumentState::Changed(info) | DocumentState::New(info) => {
-                    owned_content_cache.insert(info.filename.clone(), info.content.clone());
-                }
-                DocumentState::Unchanged(_) => {}
-            }
-        }
-
-        // Convert to &str cache for quick lookup
-        for (k, v) in &owned_content_cache {
-            content_cache.insert(k.as_str(), v.as_str());
-        }
-
-        let mut documents = Vec::new();
-        for file_path in &working_set_paths {
-            if let Some(content) = content_cache.get(file_path.as_str()) {
-                if let Some(doc) = create_document_from_content(
-                    file_path.clone(),
-                    content,
-                    &model,
-                    args.ignore_case,
-                ) {
-                    documents.push(doc);
-                }
-            } else {
-                let content = read_to_string(file_path)?;
-                if let Some(doc) = create_document_from_content(
-                    file_path.clone(),
-                    &content,
-                    &model,
-                    args.ignore_case,
-                ) {
-                    documents.push(doc);
-                }
-            }
-        }
-
-        // Step 6: Perform line-by-line search on working set
-        let search_results = search_documents(&documents, &query_embedding, &args);
-        print_search_results(&search_results);
+        // Step 5: Convert results to SearchResult format and print
+        print_workspace_search_results(&ranked_lines, args.n_lines);
     } else {
         perform_traditional_search(&args.files, &query_embedding, &model, &args)?;
     }
@@ -760,7 +752,6 @@ mod tests {
 
             // Insert documents with current metadata
             let mut docs = Vec::new();
-            let mut embeddings = Vec::new();
             for path in &file_paths {
                 let metadata = fs::metadata(path).unwrap();
                 let doc_meta = DocMeta {
@@ -774,9 +765,9 @@ mod tests {
                         .as_secs() as i64,
                 };
                 docs.push(doc_meta);
-                embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding
+                // embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding - not needed anymore
             }
-            store.upsert_documents(&docs, &embeddings).await.unwrap();
+            store.upsert_document_metadata(&docs).await.unwrap();
 
             // Analyze states - should all be unchanged
             let states = analyze_document_states(&file_paths, &store).await.unwrap();
@@ -803,7 +794,6 @@ mod tests {
                 .unwrap();
 
             let mut docs = Vec::new();
-            let mut embeddings = Vec::new();
             for path in &file_paths {
                 let doc_meta = DocMeta {
                     path: path.clone(),
@@ -811,9 +801,9 @@ mod tests {
                     mtime: 1000,    // Old timestamp
                 };
                 docs.push(doc_meta);
-                embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding
+                // embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding - not needed anymore
             }
-            store.upsert_documents(&docs, &embeddings).await.unwrap();
+            store.upsert_document_metadata(&docs).await.unwrap();
 
             // Analyze states - should all be changed
             let states = analyze_document_states(&file_paths, &store).await.unwrap();
@@ -851,11 +841,7 @@ mod tests {
                     .unwrap()
                     .as_secs() as i64,
             };
-            let embedding = vec![vec![1.0, 2.0, 3.0, 4.0]];
-            store
-                .upsert_documents(&[doc_meta], &embedding)
-                .await
-                .unwrap();
+            store.upsert_document_metadata(&[doc_meta]).await.unwrap();
 
             // Analyze states
             let states = analyze_document_states(&file_paths, &store).await.unwrap();
