@@ -925,14 +925,19 @@ mod tests {
 
     #[test]
     fn test_doc_meta_id_generation() {
-        let doc = DocMeta {
-            path: "test.txt".to_string(),
+        let doc1 = DocMeta {
+            path: "test1.txt".to_string(),
+            size_bytes: 100,
+            mtime: 1000,
+        };
+        let doc2 = DocMeta {
+            path: "test2.txt".to_string(),
             size_bytes: 100,
             mtime: 1000,
         };
 
-        let id1 = doc.id();
-        let id2 = doc.id();
+        let id1 = doc1.id();
+        let id2 = doc2.id();
 
         // IDs should be different (random generation)
         assert_ne!(id1, id2);
