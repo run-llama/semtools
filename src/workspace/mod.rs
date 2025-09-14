@@ -57,7 +57,6 @@ impl Workspace {
         Ok(())
     }
 
-
     pub fn active_path() -> Result<String> {
         let active = std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default();
         if active.is_empty() {
@@ -143,7 +142,9 @@ mod tests {
     #[test]
     fn test_workspace_set_and_get_active() {
         // Test setting active workspace
-        unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", "test-workspace"); }
+        unsafe {
+            std::env::set_var("SEMTOOLS_WORKSPACE", "test-workspace");
+        }
 
         // Test getting active workspace
         let active = Workspace::active().expect("Failed to get active");
@@ -173,7 +174,9 @@ mod tests {
 
         // Restore original state
         if let Some(value) = original {
-            unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", value); }
+            unsafe {
+                std::env::set_var("SEMTOOLS_WORKSPACE", value);
+            }
         }
     }
 
@@ -204,7 +207,9 @@ mod tests {
         let original = std::env::var("SEMTOOLS_WORKSPACE").ok();
 
         // Set up workspace
-        unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", workspace_name); }
+        unsafe {
+            std::env::set_var("SEMTOOLS_WORKSPACE", workspace_name);
+        }
 
         let workspace = Workspace {
             config: WorkspaceConfig {
@@ -247,7 +252,9 @@ mod tests {
 
         // Restore original state
         if let Some(value) = original {
-            unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", value); }
+            unsafe {
+                std::env::set_var("SEMTOOLS_WORKSPACE", value);
+            }
         }
     }
 
@@ -258,7 +265,9 @@ mod tests {
         // Save current state
         let original = std::env::var("SEMTOOLS_WORKSPACE").ok();
 
-        unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", workspace_name); }
+        unsafe {
+            std::env::set_var("SEMTOOLS_WORKSPACE", workspace_name);
+        }
 
         // Since we haven't saved a config file, open should use defaults
         let workspace = Workspace::open().expect("Failed to open workspace");
@@ -269,7 +278,9 @@ mod tests {
 
         // Restore original state
         if let Some(value) = original {
-            unsafe { std::env::set_var("SEMTOOLS_WORKSPACE", value); }
+            unsafe {
+                std::env::set_var("SEMTOOLS_WORKSPACE", value);
+            }
         }
     }
 }

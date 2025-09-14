@@ -1,4 +1,4 @@
-use anyhow::{Result, bail, Context, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use arrow_array::types::Float32Type;
 use arrow_array::{
     FixedSizeListArray, Float32Array, Float64Array, Int32Array, Int64Array, RecordBatch,
@@ -12,65 +12,6 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-
-/* LanceDB examples
-
-let schema = Arc::new(Schema::new(vec![
-    Field::new("id", DataType::Int32, false),
-    Field::new(
-        "vector",
-        DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 128),
-        true,
-    ),
-]));
-// Create a RecordBatch stream.
-let batches = RecordBatchIterator::new(
-    vec![RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(Int32Array::from_iter_values(0..256)),
-            Arc::new(
-                FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-                    (0..256).map(|_| Some(vec![Some(1.0); 128])),
-                    128,
-                ),
-            ),
-        ],
-    )
-    .unwrap()]
-    .into_iter()
-    .map(Ok),
-    schema.clone(),
-);
-db.create_table("my_table", Box::new(batches))
-    .execute()
-    .await
-    .unwrap();
-Create vector index (IVF_PQ)
-LanceDB is capable to automatically create appropriate indices based on the data types of the columns. For example,
-
-If a column has a data type of FixedSizeList<Float16/Float32>, LanceDB will create a IVF-PQ vector index with default parameters.
-Otherwise, it creates a BTree index by default.
-use lancedb::index::Index;
-tbl.create_index(&["vector"], Index::Auto)
-   .execute()
-   .await
-   .unwrap();
-User can also specify the index type explicitly, see Table::create_index.
-
-Open table and search
-let results = table
-    .query()
-    .nearest_to(&[1.0; 128])
-    .unwrap()
-    .execute()
-    .await
-    .unwrap()
-    .try_collect::<Vec<_>>()
-    .await
-    .unwrap();
-
-*/
 
 #[derive(Debug, Clone)]
 pub struct DocMeta {
@@ -229,10 +170,9 @@ impl Store {
         // Delete in chunks
         for chunk in paths.chunks(1000) {
             let filter_expr = build_in_filter(chunk);
-            tbl
-                .delete(&filter_expr)
-                .await
-                .with_context(|| format!("failed to delete documents with filter: {filter_expr}"))?;
+            tbl.delete(&filter_expr).await.with_context(|| {
+                format!("failed to delete documents with filter: {filter_expr}")
+            })?;
         }
 
         Ok(())
@@ -313,11 +253,10 @@ impl Store {
             .await
             .context("failed to list LanceDB tables")?;
         let table_existed = tables.contains(&"documents".to_string());
-        
+
         if !table_existed {
             // Create table with initial data
-            self
-                .db
+            self.db
                 .create_table("documents", Box::new(batches))
                 .execute()
                 .await
@@ -329,8 +268,7 @@ impl Store {
                 .execute()
                 .await
                 .context("failed to open 'documents' table")?;
-            tbl
-                .add(Box::new(batches))
+            tbl.add(Box::new(batches))
                 .execute()
                 .await
                 .context("failed to append batches to 'documents' table")?;
@@ -356,26 +294,27 @@ impl Store {
             .list_indices()
             .await
             .context("failed to list indices for 'documents' table")?;
-        let has_vector_index = indices.iter().any(|idx| {
-            idx.columns.contains(&"vector".to_string())
-        });
+        let has_vector_index = indices
+            .iter()
+            .any(|idx| idx.columns.contains(&"vector".to_string()));
 
         if !has_vector_index {
             // Create new index - handle case where there are too few rows for PQ index
-            match tbl.create_index(&["vector"], Index::Auto)
-                .execute()
-                .await 
-            {
+            match tbl.create_index(&["vector"], Index::Auto).execute().await {
                 Ok(_) => {
                     // Index created successfully
-                },
+                }
                 Err(e) => {
                     // Check if this is a PQ training error due to insufficient rows
                     let error_msg = e.to_string();
-                    if error_msg.contains("Not enough rows to train PQ") || error_msg.contains("Requires 256 rows") {
+                    if error_msg.contains("Not enough rows to train PQ")
+                        || error_msg.contains("Requires 256 rows")
+                    {
                         // Log a warning but continue - the database will still work without the index
                         // It will just use brute-force search instead of approximate search
-                        eprintln!("Warning: Skipping vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search.");
+                        eprintln!(
+                            "Warning: Skipping vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search."
+                        );
                     } else {
                         // For other errors, we should still fail
                         return Err(e.into());
@@ -385,7 +324,7 @@ impl Store {
         } else {
             // Optimize existing index to include new data
             // This is much faster than recreating the entire index
-            if let Err(_) = tbl.optimize(Default::default()).await {
+            if tbl.optimize(Default::default()).await.is_err() {
                 // If optimization fails, we could fall back to recreating the index
                 // but for now just log and continue
                 eprintln!("Warning: Failed to optimize vector index");
@@ -436,9 +375,9 @@ impl Store {
             .list_indices()
             .await
             .context("failed to list indices for 'documents' table")?;
-        let has_vector_index = indices.iter().any(|idx| {
-            idx.columns.contains(&"vector".to_string())
-        });
+        let has_vector_index = indices
+            .iter()
+            .any(|idx| idx.columns.contains(&"vector".to_string()));
 
         let index_type = if has_vector_index {
             // LanceDB Auto index creates IVF_PQ for vector columns by default
@@ -513,7 +452,15 @@ impl Store {
         // Use good default parameters for balanced recall/latency
         // refine_factor=5: improves recall by re-ranking more candidates
         // nprobes=10: searches more index partitions for better recall
-        self.ann_filter_top_k_with_params(query_vec, subset_paths, doc_top_k, in_batch_size, Some(5), Some(10)).await
+        self.ann_filter_top_k_with_params(
+            query_vec,
+            subset_paths,
+            doc_top_k,
+            in_batch_size,
+            Some(5),
+            Some(10),
+        )
+        .await
     }
 
     /// ANN search with configurable search parameters for recall/latency tradeoff
@@ -633,10 +580,11 @@ impl Store {
             .into_iter()
             .map(|(path, distance)| RankedDoc { path, distance })
             .collect();
-        ranked.sort_by(|a, b| a
-            .distance
-            .partial_cmp(&b.distance)
-            .unwrap_or(std::cmp::Ordering::Equal));
+        ranked.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         ranked.truncate(doc_top_k);
 
         Ok(ranked)

@@ -3,9 +3,9 @@ use clap::Parser;
 use model2vec_rs::model::StaticModel;
 use simsimd::SpatialSimilarity;
 use std::cmp::{max, min};
+use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::io::{self, BufRead, IsTerminal};
-use std::collections::HashMap;
 
 #[cfg(feature = "workspace")]
 use semtools::workspace::{

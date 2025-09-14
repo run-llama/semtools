@@ -43,10 +43,10 @@ async fn main() -> Result<()> {
                     },
                 };
                 ws.save()?;
-                
-                println!("Workspace '{}' configured.", name);
+
+                println!("Workspace '{name}' configured.");
                 println!("To activate it, run:");
-                println!("  export SEMTOOLS_WORKSPACE={}", name);
+                println!("  export SEMTOOLS_WORKSPACE={name}");
                 println!();
                 println!("Or add this to your shell profile (.bashrc, .zshrc, etc.)");
             }
