@@ -5,3 +5,6 @@ pub mod parse;
 
 #[cfg(feature = "parse")]
 pub use parse::{JobError, LlamaParseBackend, LlamaParseConfig};
+
+#[cfg(feature = "workspace")]
+pub mod workspace;
