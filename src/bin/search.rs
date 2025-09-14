@@ -9,7 +9,7 @@ use std::io::{self, BufRead, IsTerminal};
 #[cfg(feature = "workspace")]
 use semtools::workspace::{
     Workspace,
-    store::{DocMeta, Store, LineEmbedding, RankedLine},
+    store::{DocMeta, LineEmbedding, RankedLine, Store},
 };
 
 const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
@@ -271,16 +271,16 @@ fn print_search_results(results: &[SearchResult]) {
 #[cfg(feature = "workspace")]
 fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
     let is_tty = io::stdout().is_terminal();
-    
+
     for ranked_line in ranked_lines {
         let filename = &ranked_line.path;
         let distance = ranked_line.distance;
         let match_line_number = ranked_line.line_number as usize;
-        
+
         // Calculate context range
         let start = match_line_number.saturating_sub(n_lines);
         let end = match_line_number + n_lines + 1;
-        
+
         println!("{filename}:{start}::{end} ({distance})");
 
         // For workspace results, we need to read the file to get context lines
@@ -289,10 +289,10 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
             let lines: Vec<&str> = content.lines().collect();
             let actual_start = start.min(lines.len().saturating_sub(1));
             let actual_end = end.min(lines.len());
-            
+
             for (i, line) in lines[actual_start..actual_end].iter().enumerate() {
                 let line_number = actual_start + i;
-                
+
                 if line_number == match_line_number {
                     if is_tty {
                         // Highlight the matching line with yellow background and black text
@@ -309,7 +309,7 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
             // Fallback: indicate that the file couldn't be read
             println!("    [Error: Could not read file content]");
         }
-        
+
         println!(); // Empty line between results
     }
 }
@@ -409,7 +409,7 @@ fn main() -> Result<()> {
         if !line_embeddings_to_upsert.is_empty() {
             rt.block_on(store.upsert_line_embeddings(&line_embeddings_to_upsert))?;
         }
-        
+
         // Also update document metadata for tracking changes
         if !docs_to_upsert.is_empty() {
             rt.block_on(store.upsert_document_metadata(&docs_to_upsert))?;
@@ -417,13 +417,12 @@ fn main() -> Result<()> {
 
         // Step 4: Search line embeddings directly from the workspace
         let max_distance = args.max_distance.map(|d| d as f32);
-        let ranked_lines = rt
-            .block_on(store.search_line_embeddings(
-                &query_embedding,
-                &args.files,
-                args.top_k,
-                max_distance,
-            ))?;
+        let ranked_lines = rt.block_on(store.search_line_embeddings(
+            &query_embedding,
+            &args.files,
+            args.top_k,
+            max_distance,
+        ))?;
 
         // Step 5: Convert results to SearchResult format and print
         print_workspace_search_results(&ranked_lines, args.n_lines);
@@ -842,10 +841,7 @@ mod tests {
                     .unwrap()
                     .as_secs() as i64,
             };
-            store
-                .upsert_document_metadata(&[doc_meta])
-                .await
-                .unwrap();
+            store.upsert_document_metadata(&[doc_meta]).await.unwrap();
 
             // Analyze states
             let states = analyze_document_states(&file_paths, &store).await.unwrap();

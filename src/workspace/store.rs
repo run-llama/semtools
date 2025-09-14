@@ -355,8 +355,14 @@ impl Store {
 
         // Build RecordBatch
         let id_array = Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.id()));
-        let path_array = StringArray::from(line_embeddings.iter().map(|le| le.path.as_str()).collect::<Vec<_>>());
-        let line_number_array = Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.line_number));
+        let path_array = StringArray::from(
+            line_embeddings
+                .iter()
+                .map(|le| le.path.as_str())
+                .collect::<Vec<_>>(),
+        );
+        let line_number_array =
+            Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.line_number));
         let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
             line_embeddings
                 .iter()
@@ -409,7 +415,6 @@ impl Store {
 
         Ok(())
     }
-
 
     /// Ensures vector index exists for line embeddings table
     async fn ensure_line_vector_index(&self) -> Result<()> {
@@ -671,12 +676,12 @@ impl Store {
                 if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float32Array>() {
                     for i in 0..batch.num_rows() {
                         let distance = dist_array.value(i);
-                        if let Some(max_dist) = max_distance {
-                            if distance > max_dist {
-                                continue;
-                            }
+                        if let Some(max_dist) = max_distance
+                            && distance > max_dist
+                        {
+                            continue;
                         }
-                        
+
                         all_results.push(RankedLine {
                             path: path_array.value(i).to_string(),
                             line_number: line_number_array.value(i),
@@ -686,12 +691,12 @@ impl Store {
                 } else if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float64Array>() {
                     for i in 0..batch.num_rows() {
                         let distance = dist_array.value(i) as f32;
-                        if let Some(max_dist) = max_distance {
-                            if distance > max_dist {
-                                continue;
-                            }
+                        if let Some(max_dist) = max_distance
+                            && distance > max_dist
+                        {
+                            continue;
                         }
-                        
+
                         all_results.push(RankedLine {
                             path: path_array.value(i).to_string(),
                             line_number: line_number_array.value(i),
@@ -898,8 +903,6 @@ mod tests {
         assert_eq!(remaining_paths.len(), 1);
         assert!(remaining_paths.contains(&"/test/doc2.txt".to_string()));
     }
-
-
 
     #[tokio::test]
     async fn test_upsert_replaces_existing() {
