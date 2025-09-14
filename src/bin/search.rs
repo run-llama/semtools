@@ -737,14 +737,13 @@ mod tests {
 
             // All should be new documents
             for state in &states {
-                match state {
-                    DocumentState::New(doc_info) => {
-                        assert!(file_paths.contains(&doc_info.filename));
-                        assert!(!doc_info.content.is_empty());
-                        assert!(doc_info.meta.size_bytes > 0);
-                        assert!(doc_info.meta.mtime > 0);
-                    }
-                    _ => panic!("Expected New document state"),
+                if let DocumentState::New(doc_info) = state {
+                    assert!(file_paths.contains(&doc_info.filename));
+                    assert!(!doc_info.content.is_empty());
+                    assert!(doc_info.meta.size_bytes > 0);
+                    assert!(doc_info.meta.mtime > 0);
+                } else {
+                    panic!("Expected New document state");
                 }
             }
         }
