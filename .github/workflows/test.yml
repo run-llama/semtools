@@ -38,5 +38,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
+    - name: Install protoc
+      uses: taiki-e/install-action@protoc
+
     - name: Run tests
       run: cargo test --workspace
