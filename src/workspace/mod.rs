@@ -9,7 +9,6 @@ pub use store::WorkspaceStats;
 pub struct WorkspaceConfig {
     pub name: String,
     pub root_dir: String,         // e.g., ~/.semtools/my-workspace
-    pub doc_top_k: usize,         // default 250
     pub in_batch_size: usize,     // default 5_000
     pub oversample_factor: usize, // default 3
 }
@@ -19,7 +18,6 @@ impl Default for WorkspaceConfig {
         Self {
             name: "default".to_string(),
             root_dir: String::new(),
-            doc_top_k: 250,
             in_batch_size: 5_000,
             oversample_factor: 3,
         }
@@ -108,7 +106,6 @@ mod tests {
 
         assert_eq!(config.name, "default");
         assert_eq!(config.root_dir, "");
-        assert_eq!(config.doc_top_k, 250);
         assert_eq!(config.in_batch_size, 5_000);
         assert_eq!(config.oversample_factor, 3);
     }
@@ -118,7 +115,6 @@ mod tests {
         let config = WorkspaceConfig {
             name: "test-workspace".to_string(),
             root_dir: "/tmp/test".to_string(),
-            doc_top_k: 100,
             in_batch_size: 1000,
             oversample_factor: 2,
         };
@@ -134,7 +130,6 @@ mod tests {
 
         assert_eq!(deserialized.name, config.name);
         assert_eq!(deserialized.root_dir, config.root_dir);
-        assert_eq!(deserialized.doc_top_k, config.doc_top_k);
         assert_eq!(deserialized.in_batch_size, config.in_batch_size);
         assert_eq!(deserialized.oversample_factor, config.oversample_factor);
     }
@@ -215,7 +210,6 @@ mod tests {
             config: WorkspaceConfig {
                 name: workspace_name.to_string(),
                 root_dir: Workspace::root_path(workspace_name).expect("Failed to get root path"),
-                doc_top_k: 123,
                 in_batch_size: 456,
                 oversample_factor: 7,
             },
@@ -239,7 +233,6 @@ mod tests {
             serde_json::from_str(&config_content).expect("Failed to parse saved config");
 
         assert_eq!(loaded_config.name, workspace.config.name);
-        assert_eq!(loaded_config.doc_top_k, workspace.config.doc_top_k);
         assert_eq!(loaded_config.in_batch_size, workspace.config.in_batch_size);
         assert_eq!(
             loaded_config.oversample_factor,
@@ -274,7 +267,6 @@ mod tests {
 
         assert_eq!(workspace.config.name, workspace_name);
         assert!(!workspace.config.root_dir.is_empty());
-        assert_eq!(workspace.config.doc_top_k, 250); // Default value
 
         // Restore original state
         if let Some(value) = original {

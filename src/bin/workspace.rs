@@ -16,8 +16,6 @@ enum Commands {
     /// Select or create a workspace (prints export command to run)
     Select {
         name: String,
-        #[arg(long, default_value_t = 200)]
-        doc_top_k: usize,
     },
     /// Show active workspace and basic stats
     Status,
@@ -30,7 +28,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Select { name, doc_top_k } => {
+        Commands::Select { name } => {
             #[cfg(feature = "workspace")]
             {
                 // Initialize new workspace configuration
@@ -38,7 +36,6 @@ async fn main() -> Result<()> {
                     config: WorkspaceConfig {
                         name: name.clone(),
                         root_dir: Workspace::root_path(&name)?,
-                        doc_top_k,
                         ..Default::default()
                     },
                 };
@@ -62,7 +59,6 @@ async fn main() -> Result<()> {
                 let ws = Workspace::open()?;
                 println!("Active workspace: {}", ws.config.name);
                 println!("Root: {}", ws.config.root_dir);
-                println!("doc_top_k: {}", ws.config.doc_top_k);
 
                 // Open store and print counts/index status
                 let store = Store::open(&ws.config.root_dir).await?;
