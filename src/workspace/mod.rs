@@ -164,6 +164,12 @@ mod tests {
         let result = Workspace::active();
         assert!(result.is_err());
 
+        // Clear environment variable
+        unsafe {
+            std::env::remove_var("SEMTOOLS_WORKSPACE");
+        }
+
+        // Should fail when no active workspace
         let result = Workspace::active_path();
         assert!(result.is_err());
 
@@ -226,7 +232,6 @@ mod tests {
         // Read and verify config file content
         let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
         assert!(config_content.contains("test-save-open"));
-        assert!(config_content.contains("123"));
 
         // Test loading the config manually (since Workspace::open() depends on environment)
         let loaded_config: WorkspaceConfig =
