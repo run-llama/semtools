@@ -275,9 +275,10 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
     for ranked_line in ranked_lines {
         let filename = &ranked_line.path;
         let distance = ranked_line.distance;
+        // ranked_line.line_number is 0-based from database
         let match_line_number = ranked_line.line_number as usize;
 
-        // Calculate context range
+        // Calculate context range (working with 0-based indices)
         let start = match_line_number.saturating_sub(n_lines);
         let end = match_line_number + n_lines + 1;
 
@@ -287,7 +288,7 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
         // This is acceptable since we're only doing this for the final results
         if let Ok(content) = std::fs::read_to_string(filename) {
             let lines: Vec<&str> = content.lines().collect();
-            let actual_start = start.min(lines.len().saturating_sub(1));
+            let actual_start = start;
             let actual_end = end.min(lines.len());
 
             for (i, line) in lines[actual_start..actual_end].iter().enumerate() {
@@ -391,7 +392,7 @@ fn main() -> Result<()> {
                         for (line_idx, embedding) in doc.embeddings.iter().enumerate() {
                             line_embeddings_to_upsert.push(LineEmbedding {
                                 path: doc_info.filename.clone(),
-                                line_number: line_idx as i32,
+                                line_number: line_idx as i32, // Store as 0-based for consistency
                                 embedding: embedding.clone(),
                             });
                         }

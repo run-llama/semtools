@@ -6,6 +6,7 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 - **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
 - **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
+- **`workspace`** - Workspace management for accelerating search over large collections
 
 **NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` remains local-only.
 
@@ -17,6 +18,7 @@ A collection of high-performance CLI tools for document processing and semantic 
 - **Configurable** distance thresholds and returned chunk sizes
 - **Multi-format support** for parsing documents (PDF, DOCX, PPTX, etc.)
 - **Concurrent processing** for better parsing performance
+- **Workspace management** for efficient document retrieval over large collections
 
 ## Installation
 
@@ -78,10 +80,44 @@ parse docs/*.pdf | xargs search "API" | grep -A5 "authentication"
 parse report.pdf | xargs cat | search "summary" > results.txt
 ```
 
+Using Workspaces:
+
+```bash
+# Create or select a workspace
+# Workspaces are stored in ~/.semtools/workspaces/
+workspace use my-workspace
+> Workspace 'my-workspace' configured.
+> To activate it, run:
+>   export SEMTOOLS_WORKSPACE=my-workspace
+> 
+> Or add this to your shell profile (.bashrc, .zshrc, etc.)
+
+# Activate the workspace
+export SEMTOOLS_WORKSPACE=my-workspace
+
+# All search commands will now use the workspace for caching embeddings
+# The initial command is used to initialize the workspace
+search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
+
+# If documents change, they are automatically re-embedded and cached
+echo "some new content" > ./some_large_dir/some_file.txt
+search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
+
+# If documents are removed, you can run prune to clean up stale files
+workspace prune
+
+# You can see the stats of a workspace at any time
+workspace status
+> Active workspace: arxiv
+> Root: /Users/loganmarkewich/.semtools/workspaces/arxiv
+> Documents: 3000
+> Index: Yes (IVF_PQ)
+```
+
 ## CLI Help
 
 ```bash
-parse --help
+$ parse --help
 A CLI tool for parsing documents using various backends
 
 Usage: parse [OPTIONS] <FILES>...
@@ -98,7 +134,7 @@ Options:
 ```
 
 ```bash
-search --help
+$ search --help
 A CLI tool for fast semantic keyword search
 
 Usage: search [OPTIONS] <QUERY> [FILES]...
@@ -114,6 +150,23 @@ Options:
   -i, --ignore-case                  Perform case-insensitive search (default is false)
   -h, --help                         Print help
   -V, --version                      Print version
+```
+
+```bash
+$ workspace --help
+Manage semtools workspaces
+
+Usage: workspace <COMMAND>
+
+Commands:
+  use     Use or create a workspace (prints export command to run)
+  status  Show active workspace and basic stats
+  prune   Remove stale or missing files from store
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 ## Configuration
@@ -163,7 +216,7 @@ export LLAMA_CLOUD_API_KEY="your_api_key_here"
 
 - [ ] More parsing backends (something local-only would be great!)
 - [ ] Improved search algorithms
-- [ ] (optional) Persistence for speedups on repeat searches on the same files 
+- [x] (optional) Persistence for speedups on repeat searches on the same files 
 
 ## Contributing
 
