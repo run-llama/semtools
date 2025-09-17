@@ -13,10 +13,8 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Select or create a workspace (prints export command to run)
-    Select {
-        name: String,
-    },
+    /// Use or create a workspace (prints export command to run)
+    Use { name: String },
     /// Show active workspace and basic stats
     Status,
     /// Remove stale or missing files from store
@@ -28,7 +26,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Select { name } => {
+        Commands::Use { name } => {
             #[cfg(feature = "workspace")]
             {
                 // Initialize new workspace configuration
