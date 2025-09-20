@@ -131,6 +131,7 @@ search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
 # A workspace example if you are using with parse
 # create a workspace
 workspace use my-workspace2
+export SEMTOOLS_WORKSPACE=my-workspace2
 # parse files, and then search over the parsed files, and cache the file embeddings
 parse *.pdf | xargs search "financial projections" --n-lines 3
 # if you run the command with a different query (see option a and b), over the same set of files, then search will operate
