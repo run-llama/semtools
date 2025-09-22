@@ -58,7 +58,7 @@ impl Workspace {
     pub fn active_path() -> Result<String> {
         let active = std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default();
         if active.is_empty() {
-            bail!("No active workspace. Run: workspace select <name>");
+            bail!("No active workspace. Run: workspace use <name>");
         }
         Self::root_path(&active)
     }
@@ -66,7 +66,7 @@ impl Workspace {
     pub fn active() -> Result<String> {
         let active = std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default();
         if active.is_empty() {
-            bail!("No active workspace. Run: workspace select <name>");
+            bail!("No active workspace. Run: workspace use <name>");
         }
         Ok(active)
     }
