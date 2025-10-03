@@ -1,6 +1,6 @@
 # Augmented CLI Tooling
 
-If executing bash commands, you have two very helpful utilities installed
+If executing bash commands, you have three very helpful utilities installed
 - `parse` -- converts any non grep-able format into markdown, outputs a filepath for a converted markdown file for every input file to stdin
 - `search` -- performs a search using static embeddings on either stdin or a list of files (very similar to grep). Works best with keyword based search queries. Only works with text-based files so it may require the `parse` tool to help preprocess into markdown.
 - `workspace` - Workspace management for accelerating search over large collections
