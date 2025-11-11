@@ -47,6 +47,7 @@ pub struct Document {
     embeddings: Vec<Vec<f32>>,
 }
 
+#[cfg(feature = "workspace")]
 #[derive(Debug)]
 pub struct DocumentInfo {
     filename: String,
@@ -54,6 +55,7 @@ pub struct DocumentInfo {
     meta: DocMeta,
 }
 
+#[cfg(feature = "workspace")]
 #[derive(Debug)]
 pub enum DocumentState {
     Unchanged(String),     // Just the filename, no need to process
