@@ -14,11 +14,19 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 
+/// Current embedding/version number for stored document metadata.
+/// Bump this when the embedding model or preprocessing pipeline changes in a
+/// way that invalidates previously stored line embeddings.
+/// Backwards compatibility: if a workspace DB is missing the `_version` column,
+/// we treat all existing documents as version 1.
+pub const CURRENT_EMBEDDING_VERSION: u32 = 2;
+
 #[derive(Debug, Clone)]
 pub struct DocMeta {
     pub path: String,
     pub size_bytes: u64,
     pub mtime: i64,
+    pub _version: u32, // used to help manage new embedding models
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +138,9 @@ impl Store {
                 let mtime_idx = schema
                     .index_of("mtime")
                     .context("missing 'mtime' column in documents schema")?;
+                // Optional version column (backwards compatibility)
+                let version_idx = schema.index_of("_version").ok();
+
 
                 let path_array = batch
                     .column(path_idx)
@@ -147,19 +158,31 @@ impl Store {
                     .downcast_ref::<Int64Array>()
                     .ok_or_else(|| anyhow!("unexpected type for 'mtime' column"))?;
 
+                // Handle version column if it exists (backwards compatible)
+                // Prefer UInt32 but allow Int32 fallback.
+                let version_accessor: Option<Vec<u32>> = if let Some(v_idx) = version_idx {
+                    let col = batch.column(v_idx);
+                    if let Some(v) = col.as_any().downcast_ref::<arrow_array::UInt32Array>() {
+                        Some((0..batch.num_rows()).map(|i| v.value(i)).collect())
+                    } else if let Some(v) = col.as_any().downcast_ref::<Int32Array>() {
+                        Some((0..batch.num_rows()).map(|i| v.value(i) as u32).collect())
+                    } else {
+                        return Err(anyhow!("unexpected type for '_version' column"));
+                    }
+                } else {
+                    None // Missing column → default later
+                };
+
                 for i in 0..batch.num_rows() {
                     let path = path_array.value(i).to_string();
                     let size_bytes = size_array.value(i);
                     let mtime = mtime_array.value(i);
+                    let version = version_accessor
+                        .as_ref()
+                        .map(|v| v[i])
+                        .unwrap_or(1); // default for legacy rows
 
-                    existing.insert(
-                        path.clone(),
-                        DocMeta {
-                            path,
-                            size_bytes,
-                            mtime,
-                        },
-                    );
+                    existing.insert(path.clone(), DocMeta { path, size_bytes, mtime, _version: version });
                 }
             }
         }
@@ -264,6 +287,7 @@ impl Store {
             Field::new("path", DataType::Utf8, false),
             Field::new("size_bytes", DataType::UInt64, false),
             Field::new("mtime", DataType::Int64, false),
+            Field::new("_version", DataType::UInt32, false),
         ]));
 
         // Build a single RecordBatch
@@ -272,6 +296,7 @@ impl Store {
             StringArray::from(metas.iter().map(|m| m.path.as_str()).collect::<Vec<_>>());
         let size_bytes_array = UInt64Array::from_iter_values(metas.iter().map(|m| m.size_bytes));
         let mtime_array = Int64Array::from_iter_values(metas.iter().map(|m| m.mtime));
+        let version_array = arrow_array::UInt32Array::from_iter_values(metas.iter().map(|m| m._version));
 
         let batch = RecordBatch::try_new(
             schema.clone(),
@@ -280,6 +305,7 @@ impl Store {
                 Arc::new(path_array),
                 Arc::new(size_bytes_array),
                 Arc::new(mtime_array),
+                Arc::new(version_array),
             ],
         )?;
 
@@ -751,16 +777,19 @@ mod tests {
                 path: "/test/doc1.txt".to_string(),
                 size_bytes: 100,
                 mtime: 1234567890,
+                _version: CURRENT_EMBEDDING_VERSION,
             },
             DocMeta {
                 path: "/test/doc2.txt".to_string(),
                 size_bytes: 200,
                 mtime: 1234567891,
+                _version: CURRENT_EMBEDDING_VERSION,
             },
             DocMeta {
                 path: "/test/doc3.txt".to_string(),
                 size_bytes: 150,
                 mtime: 1234567892,
+                _version: CURRENT_EMBEDDING_VERSION,
             },
         ];
 
@@ -928,6 +957,7 @@ mod tests {
             path: "/test/doc.txt".to_string(),
             size_bytes: 100,
             mtime: 1000,
+            _version: CURRENT_EMBEDDING_VERSION,
         };
         let _initial_embedding = [vec![1.0, 2.0, 3.0, 4.0]];
 
@@ -948,6 +978,7 @@ mod tests {
             path: "/test/doc.txt".to_string(),
             size_bytes: 200,
             mtime: 2000,
+            _version: CURRENT_EMBEDDING_VERSION,
         };
         let _updated_embedding = [vec![5.0, 6.0, 7.0, 8.0]];
 
@@ -999,11 +1030,13 @@ mod tests {
             path: "test1.txt".to_string(),
             size_bytes: 100,
             mtime: 1000,
+            _version: CURRENT_EMBEDDING_VERSION,
         };
         let doc2 = DocMeta {
             path: "test2.txt".to_string(),
             size_bytes: 100,
             mtime: 1000,
+            _version: CURRENT_EMBEDDING_VERSION,
         };
 
         let id1 = doc1.id();
