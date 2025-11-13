@@ -182,7 +182,15 @@ impl Store {
                         .map(|v| v[i])
                         .unwrap_or(1); // default for legacy rows
 
-                    existing.insert(path.clone(), DocMeta { path, size_bytes, mtime, _version: version });
+                    existing.insert(
+                        path.clone(),
+                        DocMeta {
+                            path,
+                            size_bytes,
+                            mtime,
+                            _version: version,
+                        },
+                    );
                 }
             }
         }
