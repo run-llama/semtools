@@ -9,7 +9,7 @@ use std::io::{self, BufRead, IsTerminal};
 #[cfg(feature = "workspace")]
 use semtools::workspace::{
     Workspace,
-    store::{DocMeta, LineEmbedding, RankedLine, Store},
+    store::{CURRENT_EMBEDDING_VERSION, DocMeta, LineEmbedding, RankedLine, Store},
 };
 
 const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
@@ -103,6 +103,7 @@ async fn analyze_document_states(
                     path: file_path.clone(),
                     size_bytes,
                     mtime,
+                    _version: CURRENT_EMBEDDING_VERSION,
                 }
             }
             Err(_) => {
@@ -116,6 +117,7 @@ async fn analyze_document_states(
             Some(existing_meta) => {
                 if existing_meta.size_bytes != current_meta.size_bytes
                     || existing_meta.mtime != current_meta.mtime
+                    || existing_meta._version != CURRENT_EMBEDDING_VERSION
                 {
                     // Document has changed
                     let content = std::fs::read_to_string(file_path)?;
@@ -766,6 +768,7 @@ mod tests {
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
                         .as_secs() as i64,
+                    _version: CURRENT_EMBEDDING_VERSION,
                 };
                 docs.push(doc_meta);
                 // embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding - not needed anymore
@@ -802,6 +805,7 @@ mod tests {
                     path: path.clone(),
                     size_bytes: 10, // Different from actual size
                     mtime: 1000,    // Old timestamp
+                    _version: 1,    // simulate old version
                 };
                 docs.push(doc_meta);
                 // embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding - not needed anymore
@@ -843,6 +847,7 @@ mod tests {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs() as i64,
+                _version: CURRENT_EMBEDDING_VERSION,
             };
             store.upsert_document_metadata(&[doc_meta]).await.unwrap();
 
@@ -871,6 +876,46 @@ mod tests {
 
             assert_eq!(unchanged_count, 1);
             assert_eq!(new_count, 2);
+        }
+
+        #[tokio::test]
+        async fn test_analyze_document_states_version_mismatch() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_paths = create_test_files(&temp_dir);
+
+            // Create store and add documents with old version but correct size/mtime
+            let store = Store::open(temp_dir.path().to_str().unwrap())
+                .await
+                .unwrap();
+
+            let mut old_docs = Vec::new();
+            for path in &file_paths {
+                let metadata = fs::metadata(path).unwrap();
+                let doc_meta = DocMeta {
+                    path: path.clone(),
+                    size_bytes: metadata.len(),
+                    mtime: metadata
+                        .modified()
+                        .unwrap()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64,
+                    _version: 1, // older version than CURRENT_EMBEDDING_VERSION (2)
+                };
+                old_docs.push(doc_meta);
+            }
+            store.upsert_document_metadata(&old_docs).await.unwrap();
+
+            let states = analyze_document_states(&file_paths, &store).await.unwrap();
+            assert_eq!(states.len(), 3);
+            for state in &states {
+                match state {
+                    DocumentState::Changed(info) => {
+                        assert!(file_paths.contains(&info.filename));
+                    }
+                    _ => panic!("Expected Changed state due to version mismatch"),
+                }
+            }
         }
 
         #[tokio::test]
