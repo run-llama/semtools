@@ -141,7 +141,6 @@ impl Store {
                 // Optional version column (backwards compatibility)
                 let version_idx = schema.index_of("_version").ok();
 
-
                 let path_array = batch
                     .column(path_idx)
                     .as_any()
@@ -177,10 +176,7 @@ impl Store {
                     let path = path_array.value(i).to_string();
                     let size_bytes = size_array.value(i);
                     let mtime = mtime_array.value(i);
-                    let version = version_accessor
-                        .as_ref()
-                        .map(|v| v[i])
-                        .unwrap_or(1); // default for legacy rows
+                    let version = version_accessor.as_ref().map(|v| v[i]).unwrap_or(1); // default for legacy rows
 
                     existing.insert(
                         path.clone(),
@@ -304,7 +300,8 @@ impl Store {
             StringArray::from(metas.iter().map(|m| m.path.as_str()).collect::<Vec<_>>());
         let size_bytes_array = UInt64Array::from_iter_values(metas.iter().map(|m| m.size_bytes));
         let mtime_array = Int64Array::from_iter_values(metas.iter().map(|m| m.mtime));
-        let version_array = arrow_array::UInt32Array::from_iter_values(metas.iter().map(|m| m._version));
+        let version_array =
+            arrow_array::UInt32Array::from_iter_values(metas.iter().map(|m| m._version));
 
         let batch = RecordBatch::try_new(
             schema.clone(),

@@ -9,7 +9,7 @@ use std::io::{self, BufRead, IsTerminal};
 #[cfg(feature = "workspace")]
 use semtools::workspace::{
     Workspace,
-    store::{DocMeta, LineEmbedding, RankedLine, Store, CURRENT_EMBEDDING_VERSION},
+    store::{CURRENT_EMBEDDING_VERSION, DocMeta, LineEmbedding, RankedLine, Store},
 };
 
 const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
@@ -803,7 +803,7 @@ mod tests {
                     path: path.clone(),
                     size_bytes: 10, // Different from actual size
                     mtime: 1000,    // Old timestamp
-                    _version: 1, // simulate old version
+                    _version: 1,    // simulate old version
                 };
                 docs.push(doc_meta);
                 // embeddings.push(vec![1.0, 2.0, 3.0, 4.0]); // Dummy embedding - not needed anymore
