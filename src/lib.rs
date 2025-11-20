@@ -8,3 +8,6 @@ pub use parse::{JobError, LlamaParseBackend, LlamaParseConfig};
 
 #[cfg(feature = "workspace")]
 pub mod workspace;
+
+#[cfg(feature = "search")]
+pub mod search;
