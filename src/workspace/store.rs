@@ -1133,7 +1133,7 @@ mod tests {
     // Helper to create test files for analyze_document_states tests
     fn create_test_files(temp_dir: &tempfile::TempDir) -> Vec<String> {
         use std::fs;
-        
+
         let file1_path = temp_dir.path().join("test1.txt");
         let file2_path = temp_dir.path().join("test2.txt");
         let file3_path = temp_dir.path().join("test3.txt");
@@ -1152,7 +1152,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_document_states_all_new() {
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file_paths = create_test_files(&temp_dir);
 
@@ -1183,7 +1183,7 @@ mod tests {
         use std::fs;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file_paths = create_test_files(&temp_dir);
 
@@ -1228,7 +1228,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_document_states_changed() {
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file_paths = create_test_files(&temp_dir);
 
@@ -1269,7 +1269,7 @@ mod tests {
         use std::fs;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file_paths = create_test_files(&temp_dir);
 
@@ -1324,7 +1324,7 @@ mod tests {
         use std::fs;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file_paths = create_test_files(&temp_dir);
 
@@ -1366,7 +1366,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_document_states_nonexistent_file() {
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let mut file_paths = create_test_files(&temp_dir);
 

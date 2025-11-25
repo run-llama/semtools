@@ -2,14 +2,14 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::Path;
 
-use semtools::{LlamaParseBackend, LlamaParseConfig};
+use semtools::{LlamaParseBackend, SemtoolsConfig};
 
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for parsing documents using various backends", long_about = None)]
 struct Args {
-    /// Path to the config file. Defaults to ~/.parse_config.json
+    /// Path to the config file. Defaults to ~/.semtools_config.json
     #[clap(short = 'c', long)]
-    parse_config: Option<String>,
+    config: Option<String>,
 
     /// The backend type to use for parsing. Defaults to `llama-parse`
     #[clap(short, long, default_value = "llama-parse")]
@@ -29,16 +29,13 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Get config file path
-    let config_path = args.parse_config.unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap()
-            .join(".parse_config.json")
-            .to_string_lossy()
-            .to_string()
-    });
+    let config_path = args
+        .config
+        .unwrap_or_else(|| SemtoolsConfig::default_config_path());
 
     // Load configuration
-    let config = LlamaParseConfig::from_config_file(&config_path)?;
+    let semtools_config = SemtoolsConfig::from_config_file(&config_path)?;
+    let parse_config = semtools_config.parse.unwrap_or_default();
 
     // Validate that files exist
     for file in &args.files {
@@ -50,7 +47,7 @@ async fn main() -> Result<()> {
     // Create backend and process files
     match args.backend.as_str() {
         "llama-parse" => {
-            let backend = LlamaParseBackend::new(config, args.verbose)?;
+            let backend = LlamaParseBackend::new(parse_config, args.verbose)?;
             let results = backend.parse(args.files).await?;
 
             // Output the paths to parsed files, one per line

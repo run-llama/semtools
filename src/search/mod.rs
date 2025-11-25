@@ -4,7 +4,6 @@ use simsimd::SpatialSimilarity;
 use std::cmp::{max, min};
 use std::fs::read_to_string;
 
-
 #[cfg(feature = "workspace")]
 use crate::workspace::store::{DocMeta, DocumentState, RankedLine};
 
@@ -13,6 +12,8 @@ use crate::workspace::{
     Workspace,
     store::{LineEmbedding, Store},
 };
+
+pub const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
 
 pub struct Document {
     pub filename: String,
@@ -28,6 +29,7 @@ pub struct DocumentInfo {
     pub meta: DocMeta,
 }
 
+#[derive(Default)]
 pub struct SearchConfig {
     pub n_lines: usize,
     pub top_k: usize,
@@ -87,7 +89,7 @@ pub fn search_documents(
                 if distance < distance_threshold {
                     let bottom_range = max(0, idx.saturating_sub(config.n_lines));
                     let top_range = min(doc.lines.len(), idx + config.n_lines + 1);
-                    
+
                     search_results.push(SearchResult {
                         filename: doc.filename.clone(),
                         lines: doc.lines[bottom_range..top_range].to_vec(),
@@ -136,13 +138,12 @@ pub fn search_files(
     let query_embedding = model.encode_single(&query);
 
     let results = search_documents(&documents, &query_embedding, config);
-    
+
     Ok(results)
 }
 
-
 #[cfg(feature = "workspace")]
-pub fn search_with_workspace(
+pub async fn search_with_workspace(
     files: &[String],
     query: &str,
     model: &StaticModel,
@@ -150,11 +151,10 @@ pub fn search_with_workspace(
 ) -> Result<Vec<RankedLine>> {
     let query_embedding = model.encode_single(&query);
     let ws = Workspace::open()?;
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let store = rt.block_on(Store::open(&ws.config.root_dir))?;
+    let store = Store::open(&ws.config.root_dir).await?;
 
     // Step 1: Analyze document states (changed/new/unchanged)
-    let doc_states = rt.block_on(store.analyze_document_states(files))?;
+    let doc_states = store.analyze_document_states(files).await?;
 
     // Step 2: Process documents that need embedding updates
     let mut line_embeddings_to_upsert = Vec::new();
@@ -190,22 +190,22 @@ pub fn search_with_workspace(
 
     // Step 3: Update workspace with new/changed line embeddings
     if !line_embeddings_to_upsert.is_empty() {
-        rt.block_on(store.upsert_line_embeddings(&line_embeddings_to_upsert))?;
+        store.upsert_line_embeddings(&line_embeddings_to_upsert).await?;
     }
 
     // Also update document metadata for tracking changes
     if !docs_to_upsert.is_empty() {
-        rt.block_on(store.upsert_document_metadata(&docs_to_upsert))?;
+        store.upsert_document_metadata(&docs_to_upsert).await?;
     }
 
     // Step 4: Search line embeddings directly from the workspace
     let max_distance = config.max_distance.map(|d| d as f32);
-    let ranked_lines = rt.block_on(store.search_line_embeddings(
+    let ranked_lines = store.search_line_embeddings(
         &query_embedding,
         &files,
         config.top_k,
         max_distance,
-    ))?;
+    ).await?;
 
     Ok(ranked_lines)
 }

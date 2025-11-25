@@ -23,7 +23,12 @@ required-features = ["search"]
 [[bin]]
 name = "workspace"
 path = "src/bin/workspace.rs"
-required-features = ["workspace"]
+required-features = ["workspace", "search"]
+
+[[bin]]
+name = "ask"
+path = "src/bin/ask.rs"
+required-features = ["ask", "search"]
 
 [dependencies]
 # Common dependencies
@@ -50,13 +55,16 @@ lancedb = { version = "0.22.0", default-features = false, optional = true }
 arrow-schema = { version = "55.2.0", optional = true }
 arrow-array = { version = "55.2.0", optional = true }
 rand = { version = "0.8.5", optional = true }
-rig-core = "0.24.0"
+
+# Ask dependencies
+async-openai = { version = "0.31.0-alpha.10", optional = true }
 
 [dev-dependencies]
 tempfile = "3.14.0"
 
 [features]
-default = ["parse", "search", "workspace"]
+default = ["parse", "search", "workspace", "ask"]
 parse = ["reqwest", "serde", "serde_json", "tokio", "sha2", "hex", "mime_guess", "dirs"]
 search = ["model2vec-rs", "simsimd"]
 workspace = ["dirs", "serde", "serde_json", "tokio", "lancedb", "arrow-schema", "arrow-array", "rand"]
+ask = ["async-openai", "model2vec-rs", "simsimd", "tokio"]

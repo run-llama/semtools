@@ -1,5 +1,8 @@
 // SemTools library - provides document parsing and semantic search functionality
 
+pub mod config;
+pub use config::{SemtoolsConfig, AskConfig};
+
 #[cfg(feature = "parse")]
 pub mod parse;
 
@@ -11,3 +14,6 @@ pub mod workspace;
 
 #[cfg(feature = "search")]
 pub mod search;
+
+#[cfg(feature = "ask")]
+pub mod ask;

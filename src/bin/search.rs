@@ -4,18 +4,14 @@ use model2vec_rs::model::StaticModel;
 use std::io::{self, BufRead, IsTerminal};
 
 #[cfg(feature = "workspace")]
-use semtools::workspace::{
-    Workspace,
-    store::{RankedLine},
-};
+use semtools::workspace::{Workspace, store::RankedLine};
 
 #[cfg(feature = "workspace")]
-use semtools::search::{search_with_workspace};
+use semtools::search::search_with_workspace;
 
-use semtools::search::{Document, SearchResult, SearchConfig, search_files, search_documents};
-
-
-const MODEL_NAME: &str = "minishlab/potion-multilingual-128M";
+use semtools::search::{
+    Document, MODEL_NAME, SearchConfig, SearchResult, search_documents, search_files,
+};
 
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
@@ -128,7 +124,8 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     let model = StaticModel::from_pretrained(
@@ -169,7 +166,7 @@ fn main() -> Result<()> {
                 lines: stdin_lines,
                 embeddings,
             }];
-            
+
             let search_results = search_documents(&documents, &query_embedding, &config);
             print_search_results(&search_results);
             return Ok(());
@@ -193,12 +190,7 @@ fn main() -> Result<()> {
             max_distance: args.max_distance,
             ignore_case: args.ignore_case,
         };
-        let ranked_lines = search_with_workspace(
-            &args.files,
-            &query,
-            &model,
-            &config,
-        )?;
+        let ranked_lines = search_with_workspace(&args.files, &query, &model, &config).await?;
 
         // Step 5: Convert results to SearchResult format and print
         print_workspace_search_results(&ranked_lines, args.n_lines);
