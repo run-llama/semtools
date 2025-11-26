@@ -1,6 +1,6 @@
 {
   "name": "@llamaindex/semtools",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Semantic search and document parsing tools for the command line (Rust-backed, npm-distributed)",
   "license": "MIT",
   "author": "LlamaIndex",
@@ -15,7 +15,8 @@
   "bin": {
     "parse": "cli/parse.js",
     "search": "cli/search.js",
-    "workspace": "cli/workspace.js"
+    "workspace": "cli/workspace.js",
+    "ask": "cli/ask.js"
   },
   "main": "index.js",
   "scripts": {

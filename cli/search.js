@@ -7,7 +7,7 @@ const isWindows = process.platform === 'win32';
 const exe = isWindows ? '.exe' : '';
 const localPath = join(__dirname, '..', 'dist', 'bin', `search${exe}`);
 
-const bin = existsSync(localPath) ? localPath : 'search';
+const bin = existsSync(localPath) ? localPath : `search${exe}`;
 
 const child = spawn(bin, process.argv.slice(2), { stdio: 'inherit', shell: isWindows });
 child.on('exit', (code, signal) => {
