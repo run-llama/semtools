@@ -9,10 +9,9 @@ use async_openai::{Client, types::chat::CreateChatCompletionRequestArgs};
 use model2vec_rs::model::StaticModel;
 use serde_json::Value;
 
-use crate::ask::system_prompt::{SYSTEM_PROMPT, STDIN_SYSTEM_PROMPT};
+use crate::ask::system_prompt::{STDIN_SYSTEM_PROMPT, SYSTEM_PROMPT};
 use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
 use crate::search::SearchConfig;
-
 
 /// Run an agent loop with the search and read tools
 ///

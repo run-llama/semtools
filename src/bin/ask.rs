@@ -117,8 +117,13 @@ async fn main() -> Result<()> {
                     ask_agent_with_stdin(&stdin_content, &args.query, &client, &model_name).await?
                 }
                 ApiMode::Responses => {
-                    ask_agent_responses_with_stdin(&stdin_content, &args.query, &client, &model_name)
-                        .await?
+                    ask_agent_responses_with_stdin(
+                        &stdin_content,
+                        &args.query,
+                        &client,
+                        &model_name,
+                    )
+                    .await?
                 }
             };
 
