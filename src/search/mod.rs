@@ -254,7 +254,7 @@ mod tests {
         let documents = vec![doc1, doc2];
 
         let query = "test query";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let config = create_test_config();
 
         let results = search_documents(&documents, &query_embedding, &config);
@@ -274,7 +274,7 @@ mod tests {
         let documents = vec![doc];
 
         let query = "test";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let mut config = create_test_config();
         config.max_distance = Some(0.5); // Very restrictive threshold
 
@@ -296,7 +296,7 @@ mod tests {
         let documents = vec![doc];
 
         let query = "test";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let mut config = create_test_config();
         config.top_k = 2; // Limit to 2 results
         config.max_distance = None; // Use top_k instead of threshold
@@ -316,7 +316,7 @@ mod tests {
         let documents = vec![doc];
 
         let query = "test";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let mut config = create_test_config();
         config.n_lines = 1; // 1 line of context before/after
 
@@ -335,7 +335,7 @@ mod tests {
         let documents = vec![doc];
 
         let query = "first"; // Query that should match the first line
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let mut config = create_test_config();
         config.n_lines = 5; // More context than available
 
@@ -358,7 +358,7 @@ mod tests {
         let documents = vec![doc1, doc2];
 
         let query = "fruit";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let config = create_test_config();
 
         let results = search_documents(&documents, &query_embedding, &config);
@@ -377,7 +377,7 @@ mod tests {
         let model = get_model();
         let documents: Vec<Document> = vec![];
         let query = "test";
-        let query_embedding = model.encode_single(&query);
+        let query_embedding = model.encode_single(query);
         let config = create_test_config();
 
         let results = search_documents(&documents, &query_embedding, &config);
