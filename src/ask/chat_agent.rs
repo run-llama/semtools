@@ -9,7 +9,8 @@ use async_openai::{Client, types::chat::CreateChatCompletionRequestArgs};
 use model2vec_rs::model::StaticModel;
 use serde_json::Value;
 
-use crate::ask::tools::{ReadTool, SearchTool};
+use crate::ask::system_prompt::SYSTEM_PROMPT;
+use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
 use crate::search::SearchConfig;
 
 /// Run an agent loop with the search and read tools
@@ -32,42 +33,19 @@ pub async fn ask_agent(
     api_model: &str,
     max_iterations: Option<usize>,
 ) -> Result<String> {
-    let max_iterations = max_iterations.unwrap_or(10);
+    let max_iterations = max_iterations.unwrap_or(20);
 
     // Build the tools
-    let tools: Vec<ChatCompletionTools> = vec![SearchTool::definition()?, ReadTool::definition()?];
-
-    // System prompt to encourage citing sources
-    let system_prompt = "You are a helpful search assistant with access to search and read tools for exploring corpus' of documents.
-
-CITATION REQUIREMENTS:
-1. Use numbered citations [1], [2], [3] etc. throughout your response for ALL factual claims
-2. At the end of your response, include a '## References' section listing each citation
-3. Place citations immediately after the specific claim they support, not bundled together
-4. Each distinct source or set of sources gets its own reference number
-5. The chunks returned by search and read tools include file paths and line numbers - use these for your citations
-
-REFERENCE FORMAT RULES:
-- Single location: [1] file_path:line_number
-- Consecutive lines: [2] file_path:start_line-end_line
-- Disjoint sections in same file: [3] file_path:line1,line2,line3
-- Multiple files: Use separate reference numbers
-
-EXAMPLE FORMAT:
-Graph Convolutional Networks are powerful for node classification [1]. The architecture is described in detail across several sections [2]. GraphSAGE extends this to inductive settings [3], with additional applications discussed [4].
-
-## References
-[1] papers/gcn_paper.txt:145
-[2] papers/gcn_paper.txt:145-167
-[3] papers/graphsage.txt:67
-[4] papers/graphsage.txt:67,234,891
-
-Remember: Every factual claim needs a citation with a specific file path and line number.";
+    let tools: Vec<ChatCompletionTools> = vec![
+        GrepTool::chat_definition()?,
+        SearchTool::chat_definition()?,
+        ReadTool::chat_definition()?,
+    ];
 
     // Initialize messages with system prompt and user message
     let mut messages: Vec<ChatCompletionRequestMessage> = vec![
         ChatCompletionRequestSystemMessageArgs::default()
-            .content(system_prompt)
+            .content(SYSTEM_PROMPT)
             .build()?
             .into(),
         ChatCompletionRequestUserMessage::from(user_message).into(),
@@ -105,6 +83,9 @@ Remember: Every factual claim needs a citation with a specific file path and lin
 
                     // Call the appropriate tool
                     let response_content = call_tool(name, args, &files, model).await?;
+
+                    // Print summary of the tool response
+                    print_tool_summary(&response_content);
 
                     function_responses.push((tool_call.clone(), response_content));
                 }
@@ -155,6 +136,44 @@ async fn call_tool(
     let function_args: Value = serde_json::from_str(args)?;
 
     match name {
+        "grep" => {
+            let pattern = function_args["pattern"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("Missing 'pattern' parameter"))?;
+
+            let file_paths: Option<Vec<String>> =
+                function_args["file_paths"].as_array().map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                });
+
+            let is_regex = function_args["is_regex"].as_bool().unwrap_or(false);
+            let case_sensitive = function_args["case_sensitive"].as_bool().unwrap_or(true);
+            let context_lines = function_args["context_lines"].as_u64().unwrap_or(3) as usize;
+
+            // Log the tool call
+            println!("\n[Tool Call: grep]");
+            println!("  pattern: \"{}\"", pattern);
+            println!("  is_regex: {}", is_regex);
+            println!("  case_sensitive: {}", case_sensitive);
+            println!("  context_lines: {}", context_lines);
+            if let Some(ref paths) = file_paths {
+                if !paths.is_empty() {
+                    println!("  file_paths: {:?}", paths);
+                }
+            }
+
+            GrepTool::grep(
+                files,
+                pattern,
+                file_paths,
+                is_regex,
+                case_sensitive,
+                context_lines,
+            )
+            .await
+        }
         "search" => {
             let query = function_args["query"]
                 .as_str()
@@ -181,7 +200,7 @@ async fn call_tool(
             println!("    ignore_case: {}", ignore_case);
 
             // Max distance and top_k are mutually exclusive
-            if Some(max_distance).is_none() {
+            if max_distance.is_none() {
                 println!("    top_k: {}", top_k);
             } else {
                 println!("    max_distance: {:?}", max_distance.unwrap());
@@ -211,5 +230,35 @@ async fn call_tool(
             ReadTool::read(path, start_line, end_line).await
         }
         _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
+    }
+}
+
+/// Print a summary of the tool response
+fn print_tool_summary(response: &str) {
+    // Count the number of <chunk> tags
+    let chunk_count = response.matches("<chunk").count();
+
+    // Count total lines in all chunks (excluding the chunk tags themselves)
+    let total_lines: usize = response
+        .split("<chunk")
+        .skip(1) // Skip content before first chunk
+        .filter_map(|chunk| {
+            // Find the content between the opening tag and </chunk>
+            chunk
+                .split_once(">")
+                .and_then(|(_, rest)| rest.split_once("</chunk>"))
+                .map(|(content, _)| content.lines().count())
+        })
+        .sum();
+
+    if chunk_count > 0 {
+        println!(
+            "  → Returned {} chunk(s) with {} total lines",
+            chunk_count, total_lines
+        );
+    } else if response.contains("No matches found") {
+        println!("  → No matches found");
+    } else {
+        println!("  → Returned {} lines", response.lines().count());
     }
 }

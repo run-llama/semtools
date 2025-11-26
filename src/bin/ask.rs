@@ -4,9 +4,11 @@ use async_openai::config::OpenAIConfig;
 use clap::Parser;
 use model2vec_rs::model::StaticModel;
 
-use semtools::ask::agent::ask_agent;
-use semtools::search::MODEL_NAME;
 use semtools::SemtoolsConfig;
+use semtools::ask::chat_agent::ask_agent;
+use semtools::ask::responses_agent::ask_agent_responses;
+use semtools::config::ApiMode;
+use semtools::search::MODEL_NAME;
 
 #[derive(Parser, Debug)]
 #[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
@@ -33,6 +35,10 @@ struct Args {
     /// Model to use for the agent (overrides config file)
     #[clap(short, long)]
     model: Option<String>,
+
+    /// API mode to use: 'chat' or 'responses' (overrides config file)
+    #[clap(long)]
+    api_mode: Option<String>,
 }
 
 #[tokio::main]
@@ -69,6 +75,22 @@ async fn main() -> Result<()> {
     // Resolve max iterations from config
     let max_iterations = ask_config.max_iterations;
 
+    // Resolve API mode with priority: CLI arg > config file > default
+    let api_mode = if let Some(mode_str) = args.api_mode {
+        match mode_str.to_lowercase().as_str() {
+            "chat" => ApiMode::Chat,
+            "responses" => ApiMode::Responses,
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid API mode: '{}'. Must be 'chat' or 'responses'",
+                    mode_str
+                ));
+            }
+        }
+    } else {
+        ask_config.api_mode
+    };
+
     // Load embedding model
     let model = StaticModel::from_pretrained(
         MODEL_NAME, // "minishlab/potion-multilingual-128M",
@@ -84,16 +106,31 @@ async fn main() -> Result<()> {
     }
     let client = Client::with_config(openai_config);
 
-    // Run the agent
-    let response = ask_agent(
-        args.files,
-        &args.query,
-        &model,
-        &client,
-        &model_name,
-        max_iterations,
-    )
-    .await?;
+    // Run the appropriate agent based on API mode
+    let response = match api_mode {
+        ApiMode::Chat => {
+            ask_agent(
+                args.files,
+                &args.query,
+                &model,
+                &client,
+                &model_name,
+                max_iterations,
+            )
+            .await?
+        }
+        ApiMode::Responses => {
+            ask_agent_responses(
+                args.files,
+                &args.query,
+                &model,
+                &client,
+                &model_name,
+                max_iterations,
+            )
+            .await?
+        }
+    };
 
     println!("\n{}", response);
 

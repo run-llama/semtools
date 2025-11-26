@@ -224,7 +224,8 @@ Create a `~/.semtools_config.json` file with settings for the tools you use. All
     "api_key": "your_openai_api_key_here",
     "base_url": null,
     "model": "gpt-4o-mini",
-    "max_iterations": 10
+    "max_iterations": 20,
+    "api_mode": "responses",  // Can be responses or chat
   }
 }
 ```

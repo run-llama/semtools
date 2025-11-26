@@ -190,7 +190,9 @@ pub async fn search_with_workspace(
 
     // Step 3: Update workspace with new/changed line embeddings
     if !line_embeddings_to_upsert.is_empty() {
-        store.upsert_line_embeddings(&line_embeddings_to_upsert).await?;
+        store
+            .upsert_line_embeddings(&line_embeddings_to_upsert)
+            .await?;
     }
 
     // Also update document metadata for tracking changes
@@ -200,12 +202,9 @@ pub async fn search_with_workspace(
 
     // Step 4: Search line embeddings directly from the workspace
     let max_distance = config.max_distance.map(|d| d as f32);
-    let ranked_lines = store.search_line_embeddings(
-        &query_embedding,
-        &files,
-        config.top_k,
-        max_distance,
-    ).await?;
+    let ranked_lines = store
+        .search_line_embeddings(&query_embedding, &files, config.top_k, max_distance)
+        .await?;
 
     Ok(ranked_lines)
 }

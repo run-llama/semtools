@@ -58,6 +58,11 @@ rand = { version = "0.8.5", optional = true }
 
 # Ask dependencies
 async-openai = { version = "0.31.0-alpha.10", optional = true }
+grep = { version = "0.3", optional = true }
+grep-searcher = { version = "0.1", optional = true }
+grep-matcher = { version = "0.1", optional = true }
+grep-regex = { version = "0.1", optional = true }
+regex = { version = "1.11", optional = true }
 
 [dev-dependencies]
 tempfile = "3.14.0"
@@ -67,4 +72,4 @@ default = ["parse", "search", "workspace", "ask"]
 parse = ["reqwest", "serde", "serde_json", "tokio", "sha2", "hex", "mime_guess", "dirs"]
 search = ["model2vec-rs", "simsimd"]
 workspace = ["dirs", "serde", "serde_json", "tokio", "lancedb", "arrow-schema", "arrow-array", "rand"]
-ask = ["async-openai", "model2vec-rs", "simsimd", "tokio"]
+ask = ["async-openai", "model2vec-rs", "simsimd", "tokio", "grep", "grep-searcher", "grep-matcher", "grep-regex", "regex"]

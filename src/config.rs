@@ -19,6 +19,22 @@ pub struct SemtoolsConfig {
     pub ask: Option<AskConfig>,
 }
 
+/// API mode for the ask CLI tool
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiMode {
+    /// Use the Chat Completions API (legacy)
+    Chat,
+    /// Use the Responses API (default, recommended for newer models)
+    Responses,
+}
+
+impl Default for ApiMode {
+    fn default() -> Self {
+        ApiMode::Responses
+    }
+}
+
 /// Configuration for the ask CLI tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AskConfig {
@@ -33,6 +49,10 @@ pub struct AskConfig {
 
     /// Maximum number of agent loop iterations
     pub max_iterations: Option<usize>,
+
+    /// API mode to use (chat or responses). Defaults to responses.
+    #[serde(default)]
+    pub api_mode: ApiMode,
 }
 
 impl Default for AskConfig {
@@ -41,7 +61,8 @@ impl Default for AskConfig {
             api_key: std::env::var("OPENAI_API_KEY").ok(),
             base_url: None,
             model: Some("gpt-4o-mini".to_string()),
-            max_iterations: Some(10),
+            max_iterations: Some(20),
+            api_mode: ApiMode::default(),
         }
     }
 }
