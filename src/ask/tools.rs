@@ -227,14 +227,14 @@ impl SearchTool {
         #[cfg(feature = "workspace")]
         if Workspace::active().is_ok() {
             // Workspace mode: use persisted line embeddings for speed
-            let ranked_lines = search_with_workspace(&files, &query, &model, &config).await?;
+            let ranked_lines = search_with_workspace(files, &query, model, &config).await?;
 
             // Step 5: Convert results to SearchResult format and print
             let formatted = format_ranked_lines(&ranked_lines, config.n_lines);
             return Ok(formatted);
         }
 
-        let search_results = search_files(&files, &query, &model, &config)?;
+        let search_results = search_files(files, &query, model, &config)?;
         let formatted = format_search_results(&search_results);
 
         Ok(formatted)

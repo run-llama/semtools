@@ -135,7 +135,7 @@ pub fn search_files(
         }
     }
 
-    let query_embedding = model.encode_single(&query);
+    let query_embedding = model.encode_single(query);
 
     let results = search_documents(&documents, &query_embedding, config);
 
@@ -149,7 +149,7 @@ pub async fn search_with_workspace(
     model: &StaticModel,
     config: &SearchConfig,
 ) -> Result<Vec<RankedLine>> {
-    let query_embedding = model.encode_single(&query);
+    let query_embedding = model.encode_single(query);
     let ws = Workspace::open()?;
     let store = Store::open(&ws.config.root_dir).await?;
 
@@ -167,7 +167,7 @@ pub async fn search_with_workspace(
                 if let Some(doc) = create_document_from_content(
                     doc_info.filename.clone(),
                     &doc_info.content,
-                    &model,
+                    model,
                     config.ignore_case,
                 ) {
                     // Create LineEmbedding entries for each line
@@ -203,7 +203,7 @@ pub async fn search_with_workspace(
     // Step 4: Search line embeddings directly from the workspace
     let max_distance = config.max_distance.map(|d| d as f32);
     let ranked_lines = store
-        .search_line_embeddings(&query_embedding, &files, config.top_k, max_distance)
+        .search_line_embeddings(&query_embedding, files, config.top_k, max_distance)
         .await?;
 
     Ok(ranked_lines)

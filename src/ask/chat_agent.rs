@@ -158,10 +158,9 @@ async fn call_tool(
             println!("  is_regex: {}", is_regex);
             println!("  case_sensitive: {}", case_sensitive);
             println!("  context_lines: {}", context_lines);
-            if let Some(ref paths) = file_paths {
-                if !paths.is_empty() {
-                    println!("  file_paths: {:?}", paths);
-                }
+            if let Some(ref paths) = file_paths && !paths.is_empty()
+            {
+                println!("  file_paths: {:?}", paths);
             }
 
             GrepTool::grep(

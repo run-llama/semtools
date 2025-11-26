@@ -20,19 +20,14 @@ pub struct SemtoolsConfig {
 }
 
 /// API mode for the ask CLI tool
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ApiMode {
     /// Use the Chat Completions API (legacy)
     Chat,
     /// Use the Responses API (default, recommended for newer models)
+    #[default]
     Responses,
-}
-
-impl Default for ApiMode {
-    fn default() -> Self {
-        ApiMode::Responses
-    }
 }
 
 /// Configuration for the ask CLI tool
