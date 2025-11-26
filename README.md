@@ -6,9 +6,10 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 - **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
 - **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
+- **`ask`** - AI agent with search and read tools for answering questions over document collections (defaults to OpenAI, but see the [config section](#configuration) to learn more about connecting to any OpenAI-Compatible API)
 - **`workspace`** - Workspace management for accelerating search over large collections
 
-**NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` remains local-only.
+**NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` and `workspace` remain local-only. `ask` requires an OpenAI API key.
 
 ## Key Features
 
@@ -40,11 +41,8 @@ Or via cargo:
 # install entire crate
 cargo install semtools
 
-# install only parse
+# install only select features
 cargo install semtools --no-default-features --features=parse
-
-# install only search
-cargo install semtools --no-default-features --features=search
 ```
 
 Note: Installing from npm builds the Rust binaries locally during install if a prebuilt binary is not available, which requires Rust and Cargo to be available in your environment. Install from `rustup` if needed: `https://www.rust-lang.org/tools/install`.
@@ -60,8 +58,14 @@ parse my_dir/*.pdf
 # Search some (text-based) files
 search "some keywords" *.txt --max-distance 0.3 --n-lines 5
 
+# Ask questions about your documents using an AI agent
+ask "What are the main findings?" papers/*.txt
+
 # Combine parsing and search
 parse my_docs/*.pdf | xargs search "API endpoints"
+
+# Combine parsing with the ask agent
+parse research_papers/*.pdf | xargs ask "Summarize the key methodologies"
 ```
 
 Advanced Usage:
@@ -126,11 +130,11 @@ Arguments:
   <FILES>...  Files to parse
 
 Options:
-  -c, --parse-config <PARSE_CONFIG>  Path to the config file. Defaults to ~/.parse_config.json
-  -b, --backend <BACKEND>            The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
-  -v, --verbose                      Verbose output while parsing
-  -h, --help                         Print help
-  -V, --version                      Print version
+  -c, --config <CONFIG>    Path to the config file. Defaults to ~/.semtools_config.json
+  -b, --backend <BACKEND>  The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
+  -v, --verbose            Verbose output while parsing
+  -h, --help               Print help
+  -V, --version            Print version
 ```
 
 ```bash
@@ -169,42 +173,114 @@ Options:
   -V, --version  Print version
 ```
 
+```bash
+$ ask --help
+A CLI tool for fast semantic keyword search
+
+Usage: ask [OPTIONS] <QUERY> [FILES]...
+
+Arguments:
+  <QUERY>     Query to prompt the agent with
+  [FILES]...  Files to search, optional if using stdin
+
+Options:
+  -c, --config <CONFIG>      Path to the config file. Defaults to ~/.semtools_config.json
+      --api-key <API_KEY>    OpenAI API key (overrides config file and env var)
+      --base-url <BASE_URL>  OpenAI base URL (overrides config file)
+  -m, --model <MODEL>        Model to use for the agent (overrides config file)
+  -h, --help                 Print help
+  -V, --version              Print version
+```
+
 ## Configuration
 
-### Parse Tool Configuration
+SemTools uses a unified configuration file at `~/.semtools_config.json` that contains settings for all CLI tools. You can also specify a custom config file path using the `-c` or `--config` flag on any command.
 
-By default, the `parse` tool uses the LlamaParse API to parse documents.
+### Unified Configuration File
 
-It will look for a `~/.parse_config.json` file to configure the API key and other parameters.
-
-Otherwise, it will fallback to looking for a `LLAMA_CLOUD_API_KEY` environment variable and a set of default parameters.
-
-To configure the `parse` tool, create a `~/.parse_config.json` file with the following content (defaults are shown below):
+Create a `~/.semtools_config.json` file with settings for the tools you use. All sections are optional - if not specified, sensible defaults will be used.
 
 ```json
 {
-  "api_key": "your_llama_cloud_api_key_here",
-  "num_ongoing_requests": 10,
-  "base_url": "https://api.cloud.llamaindex.ai",
-  "check_interval": 5,
-  "max_timeout": 3600,
-  "max_retries": 10,
-  "retry_delay_ms": 1000,
-  "backoff_multiplier": 2.0,
-  "parse_kwargs": {
-    "parse_mode": "parse_page_with_agent",
-    "model": "openai-gpt-4-1-mini",
-    "high_res_ocr": "true",
-    "adaptive_long_table": "true",
-    "outlined_table_extraction": "true",
-    "output_tables_as_HTML": "true"
+  "parse": {
+    "api_key": "your_llama_cloud_api_key_here",
+    "num_ongoing_requests": 10,
+    "base_url": "https://api.cloud.llamaindex.ai",
+    "parse_kwargs": {
+      "parse_mode": "parse_page_with_agent",
+      "model": "openai-gpt-4-1-mini",
+      "high_res_ocr": "true",
+      "adaptive_long_table": "true",
+      "outlined_table_extraction": "true",
+      "output_tables_as_HTML": "true"
+    },
+    "check_interval": 5,
+    "max_timeout": 3600,
+    "max_retries": 10,
+    "retry_delay_ms": 1000,
+    "backoff_multiplier": 2.0
+  },
+  "ask": {
+    "api_key": "your_openai_api_key_here",
+    "base_url": null,
+    "model": "gpt-4o-mini",
+    "max_iterations": 20,
+    "api_mode": "responses",  // Can be responses or chat
   }
 }
 ```
 
-Or just set via environment variable:
+See `example_semtools_config.json` in the repository for a complete example.
+
+### Environment Variables
+
+As an alternative or supplement to the config file, you can set API keys via environment variables:
+
 ```bash
-export LLAMA_CLOUD_API_KEY="your_api_key_here"
+# For parse tool
+export LLAMA_CLOUD_API_KEY="your_llama_cloud_api_key_here"
+
+# For ask tool
+export OPENAI_API_KEY="your_openai_api_key_here"
+```
+
+### Configuration Priority
+
+Configuration values are resolved in the following priority order (highest to lowest):
+
+1. **CLI arguments** (e.g., `--api-key`, `--model`, `--base-url`)
+2. **Config file** (`~/.semtools_config.json` or custom path via `-c`)
+3. **Environment variables** (`LLAMA_CLOUD_API_KEY`, `OPENAI_API_KEY`)
+4. **Built-in defaults**
+
+This allows you to set common defaults in the config file while overriding them on a per-command basis when needed.
+
+### Tool-Specific Configuration
+
+#### Parse Tool
+
+The `parse` tool requires a LlamaParse API key. Get your free API key at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai).
+
+Configuration options:
+- `api_key`: Your LlamaParse API key
+- `base_url`: API endpoint (default: "https://api.cloud.llamaindex.ai")
+- `num_ongoing_requests`: Number of concurrent requests (default: 10)
+- `parse_kwargs`: Additional parsing parameters
+- `check_interval`, `max_timeout`, `max_retries`, `retry_delay_ms`, `backoff_multiplier`: Retry and timeout settings
+
+#### Ask Tool
+
+The `ask` tool requires an OpenAI API key for the agent's LLM.
+
+Configuration options:
+- `api_key`: Your OpenAI API key
+- `base_url`: Custom OpenAI-compatible API endpoint (optional, for using other providers)
+- `model`: LLM model to use (default: "gpt-4o-mini")
+- `max_iterations`: Maximum agent loop iterations (default: 10)
+
+You can also override these per-command:
+```bash
+ask "What is this about?" docs/*.txt --model gpt-4o --api-key sk-...
 ```
 
 ## Agent Use Case Examples
@@ -216,7 +292,8 @@ export LLAMA_CLOUD_API_KEY="your_api_key_here"
 
 - [ ] More parsing backends (something local-only would be great!)
 - [ ] Improved search algorithms
-- [x] (optional) Persistence for speedups on repeat searches on the same files 
+- [x] Built-in agentic search
+- [x] Persistence for speedups on repeat searches on the same files 
 
 ## Contributing
 

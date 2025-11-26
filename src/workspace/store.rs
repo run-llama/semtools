@@ -14,6 +14,8 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::search::DocumentInfo;
+
 /// Current embedding/version number for stored document metadata.
 /// Bump this when the embedding model or preprocessing pipeline changes in a
 /// way that invalidates previously stored line embeddings.
@@ -27,6 +29,13 @@ pub struct DocMeta {
     pub size_bytes: u64,
     pub mtime: i64,
     pub _version: u32, // used to help manage new embedding models
+}
+
+#[derive(Debug)]
+pub enum DocumentState {
+    Unchanged(String),     // Just the filename, no need to process
+    Changed(DocumentInfo), // Full document info for processing
+    New(DocumentInfo),     // Full document info for processing
 }
 
 #[derive(Debug, Clone)]
@@ -750,6 +759,73 @@ impl Store {
 
         Ok(all_results)
     }
+
+    pub async fn analyze_document_states(
+        &self,
+        file_paths: &[String],
+    ) -> Result<Vec<DocumentState>> {
+        // Get existing document metadata from workspace
+        let existing_docs = self.get_existing_docs(file_paths).await?;
+
+        let mut states = Vec::new();
+
+        for file_path in file_paths {
+            // Read current file metadata
+            let current_meta = match std::fs::metadata(file_path) {
+                Ok(metadata) => {
+                    let size_bytes = metadata.len();
+                    let mtime = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    DocMeta {
+                        path: file_path.clone(),
+                        size_bytes,
+                        mtime,
+                        _version: CURRENT_EMBEDDING_VERSION,
+                    }
+                }
+                Err(_) => {
+                    // File doesn't exist, skip it
+                    continue;
+                }
+            };
+
+            // Check if document exists in workspace and has changed
+            match existing_docs.get(file_path) {
+                Some(existing_meta) => {
+                    if existing_meta.size_bytes != current_meta.size_bytes
+                        || existing_meta.mtime != current_meta.mtime
+                        || existing_meta._version != CURRENT_EMBEDDING_VERSION
+                    {
+                        // Document has changed
+                        let content = std::fs::read_to_string(file_path)?;
+                        states.push(DocumentState::Changed(DocumentInfo {
+                            filename: file_path.clone(),
+                            content,
+                            meta: current_meta,
+                        }));
+                    } else {
+                        // Document unchanged
+                        states.push(DocumentState::Unchanged(file_path.clone()));
+                    }
+                }
+                None => {
+                    // New document
+                    let content = std::fs::read_to_string(file_path)?;
+                    states.push(DocumentState::New(DocumentInfo {
+                        filename: file_path.clone(),
+                        content,
+                        meta: current_meta,
+                    }));
+                }
+            }
+        }
+
+        Ok(states)
+    }
 }
 
 pub fn build_in_filter(paths: &[String]) -> String {
@@ -1052,5 +1128,264 @@ mod tests {
         // IDs should be valid i32 values
         assert!(id1 >= 0);
         assert!(id2 >= 0);
+    }
+
+    // Helper to create test files for analyze_document_states tests
+    fn create_test_files(temp_dir: &tempfile::TempDir) -> Vec<String> {
+        use std::fs;
+
+        let file1_path = temp_dir.path().join("test1.txt");
+        let file2_path = temp_dir.path().join("test2.txt");
+        let file3_path = temp_dir.path().join("test3.txt");
+
+        fs::write(&file1_path, "This is test file 1\nWith multiple lines").unwrap();
+        fs::write(&file2_path, "This is test file 2\nWith different content").unwrap();
+        fs::write(&file3_path, "This is test file 3\nWith more content").unwrap();
+
+        vec![
+            file1_path.to_string_lossy().to_string(),
+            file2_path.to_string_lossy().to_string(),
+            file3_path.to_string_lossy().to_string(),
+        ]
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_all_new() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_paths = create_test_files(&temp_dir);
+
+        // Create empty store
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+
+        assert_eq!(states.len(), 3);
+
+        // All should be new documents
+        for state in &states {
+            if let DocumentState::New(doc_info) = state {
+                assert!(file_paths.contains(&doc_info.filename));
+                assert!(!doc_info.content.is_empty());
+                assert!(doc_info.meta.size_bytes > 0);
+                assert!(doc_info.meta.mtime > 0);
+            } else {
+                panic!("Expected New document state");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_unchanged() {
+        use std::fs;
+        use std::time::UNIX_EPOCH;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_paths = create_test_files(&temp_dir);
+
+        // Create store and add documents
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        // Insert documents with current metadata
+        let mut docs = Vec::new();
+        for path in &file_paths {
+            let metadata = fs::metadata(path).unwrap();
+            let doc_meta = DocMeta {
+                path: path.clone(),
+                size_bytes: metadata.len(),
+                mtime: metadata
+                    .modified()
+                    .unwrap()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64,
+                _version: CURRENT_EMBEDDING_VERSION,
+            };
+            docs.push(doc_meta);
+        }
+        store.upsert_document_metadata(&docs).await.unwrap();
+
+        // Analyze states - should all be unchanged
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+
+        assert_eq!(states.len(), 3);
+
+        for state in &states {
+            if let DocumentState::Unchanged(filename) = state {
+                assert!(file_paths.contains(filename));
+            } else {
+                panic!("Expected Unchanged document state");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_changed() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_paths = create_test_files(&temp_dir);
+
+        // Create store and add documents with old metadata
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        let mut docs = Vec::new();
+        for path in &file_paths {
+            let doc_meta = DocMeta {
+                path: path.clone(),
+                size_bytes: 10, // Different from actual size
+                mtime: 1000,    // Old timestamp
+                _version: 1,    // simulate old version
+            };
+            docs.push(doc_meta);
+        }
+        store.upsert_document_metadata(&docs).await.unwrap();
+
+        // Analyze states - should all be changed
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+
+        assert_eq!(states.len(), 3);
+
+        for state in &states {
+            if let DocumentState::Changed(doc_info) = state {
+                assert!(file_paths.contains(&doc_info.filename));
+                assert!(!doc_info.content.is_empty());
+            } else {
+                panic!("Expected Changed document state");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_mixed() {
+        use std::fs;
+        use std::time::UNIX_EPOCH;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_paths = create_test_files(&temp_dir);
+
+        // Create store and add only the first document
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        let metadata = fs::metadata(&file_paths[0]).unwrap();
+        let doc_meta = DocMeta {
+            path: file_paths[0].clone(),
+            size_bytes: metadata.len(),
+            mtime: metadata
+                .modified()
+                .unwrap()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
+            _version: CURRENT_EMBEDDING_VERSION,
+        };
+        store.upsert_document_metadata(&[doc_meta]).await.unwrap();
+
+        // Analyze states
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+
+        assert_eq!(states.len(), 3);
+
+        // First should be unchanged, others should be new
+        let mut unchanged_count = 0;
+        let mut new_count = 0;
+
+        for state in &states {
+            match state {
+                DocumentState::Unchanged(filename) => {
+                    assert_eq!(filename, &file_paths[0]);
+                    unchanged_count += 1;
+                }
+                DocumentState::New(doc_info) => {
+                    assert!(file_paths[1..].contains(&doc_info.filename));
+                    new_count += 1;
+                }
+                _ => panic!("Unexpected document state"),
+            }
+        }
+
+        assert_eq!(unchanged_count, 1);
+        assert_eq!(new_count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_version_mismatch() {
+        use std::fs;
+        use std::time::UNIX_EPOCH;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_paths = create_test_files(&temp_dir);
+
+        // Create store and add documents with old version but correct size/mtime
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        let mut old_docs = Vec::new();
+        for path in &file_paths {
+            let metadata = fs::metadata(path).unwrap();
+            let doc_meta = DocMeta {
+                path: path.clone(),
+                size_bytes: metadata.len(),
+                mtime: metadata
+                    .modified()
+                    .unwrap()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64,
+                _version: 1, // older version than CURRENT_EMBEDDING_VERSION (2)
+            };
+            old_docs.push(doc_meta);
+        }
+        store.upsert_document_metadata(&old_docs).await.unwrap();
+
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+        assert_eq!(states.len(), 3);
+        for state in &states {
+            match state {
+                DocumentState::Changed(info) => {
+                    assert!(file_paths.contains(&info.filename));
+                }
+                _ => panic!("Expected Changed state due to version mismatch"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_document_states_nonexistent_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut file_paths = create_test_files(&temp_dir);
+
+        // Add a nonexistent file to the list
+        file_paths.push("/nonexistent/file.txt".to_string());
+
+        let store = Store::open(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        let states = store.analyze_document_states(&file_paths).await.unwrap();
+
+        // Should only have states for existing files
+        assert_eq!(states.len(), 3);
+
+        for state in &states {
+            if let DocumentState::New(doc_info) = state {
+                assert_ne!(doc_info.filename, "/nonexistent/file.txt");
+            }
+        }
     }
 }
