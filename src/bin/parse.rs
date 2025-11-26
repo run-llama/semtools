@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     // Get config file path
     let config_path = args
         .config
-        .unwrap_or_else(|| SemtoolsConfig::default_config_path());
+        .unwrap_or_else(SemtoolsConfig::default_config_path);
 
     // Load configuration
     let semtools_config = SemtoolsConfig::from_config_file(&config_path)?;
