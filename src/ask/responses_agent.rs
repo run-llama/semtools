@@ -2,8 +2,9 @@ use anyhow::Result;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::responses::{
-    CreateResponseArgs, FunctionCallOutput, FunctionCallOutputItemParam, FunctionToolCall,
-    InputItem, InputParam, Item, MessageItem, OutputItem, Role, Tool,
+    CreateResponseArgs, EasyInputContent, EasyInputMessage, FunctionCallOutput,
+    FunctionCallOutputItemParam, FunctionToolCall, InputItem, InputParam, Item, MessageItem,
+    MessageType, OutputItem, Role, Tool,
 };
 use model2vec_rs::model::StaticModel;
 use serde_json::Value;
@@ -43,7 +44,11 @@ pub async fn ask_agent_responses(
 
     // Initialize input items with user message
     // Note: For Responses API, we use the instructions parameter for the system prompt
-    let mut input_items: Vec<InputItem> = vec![InputItem::text_message(Role::User, user_message)];
+    let mut input_items: Vec<InputItem> = vec![InputItem::EasyMessage(EasyInputMessage {
+        r#type: MessageType::Message,
+        role: Role::User,
+        content: EasyInputContent::Text(user_message.to_string()),
+    })];
 
     // Agent loop
     for _iteration in 0..max_iterations {
@@ -302,7 +307,11 @@ pub async fn ask_agent_responses_with_stdin(
     );
 
     // Initialize input items with user message (no tools)
-    let input_items: Vec<InputItem> = vec![InputItem::text_message(Role::User, &full_message)];
+    let input_items: Vec<InputItem> = vec![InputItem::EasyMessage(EasyInputMessage {
+        r#type: MessageType::Message,
+        role: Role::User,
+        content: EasyInputContent::Text(full_message),
+    })];
 
     // Create request without tools
     let request = CreateResponseArgs::default()
