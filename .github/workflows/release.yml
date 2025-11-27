@@ -86,6 +86,10 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@protoc
 
+    - name: Set macOS deployment target
+      if: matrix.target == 'x86_64-apple-darwin'
+      run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+
     - name: Build release binaries
       run: cargo build --release --target ${{ matrix.target }}
 
