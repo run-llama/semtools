@@ -33,3 +33,5 @@ Graph Convolutional Networks are powerful for node classification [1]. The archi
 [4] papers/graphsage.txt:67,234,891
 
 Remember: Every factual claim needs a citation with a specific file path and line number.";
+
+pub const STDIN_SYSTEM_PROMPT: &str = "You are a helpful assistant. The user has provided you with content via stdin, which will be included in their message. Please analyze and respond to their query based on this content.";

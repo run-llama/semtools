@@ -9,7 +9,7 @@ use async_openai::{Client, types::chat::CreateChatCompletionRequestArgs};
 use model2vec_rs::model::StaticModel;
 use serde_json::Value;
 
-use crate::ask::system_prompt::SYSTEM_PROMPT;
+use crate::ask::system_prompt::{STDIN_SYSTEM_PROMPT, SYSTEM_PROMPT};
 use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
 use crate::search::SearchConfig;
 
@@ -260,5 +260,61 @@ fn print_tool_summary(response: &str) {
         println!("  → No matches found");
     } else {
         println!("  → Returned {} lines", response.lines().count());
+    }
+}
+
+/// Run an agent with stdin content injected directly (no tools available)
+///
+/// # Arguments
+/// * `stdin_content` - The content from stdin to include in the prompt
+/// * `user_message` - The user's query/message
+/// * `client` - OpenAI API client
+/// * `api_model` - The LLM model to use (e.g., "gpt-4o-mini")
+///
+/// # Returns
+/// The response from the agent as a String
+pub async fn ask_agent_with_stdin(
+    stdin_content: &str,
+    user_message: &str,
+    client: &Client<OpenAIConfig>,
+    api_model: &str,
+) -> Result<String> {
+    // Construct the user message with stdin content
+    let full_message = format!(
+        "<stdin_content>\n{}\n</stdin_content>\n\n{}",
+        stdin_content, user_message
+    );
+
+    // Initialize messages with system prompt and user message (no tools)
+    let messages: Vec<ChatCompletionRequestMessage> = vec![
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content(STDIN_SYSTEM_PROMPT)
+            .build()?
+            .into(),
+        ChatCompletionRequestUserMessage::from(full_message.as_str()).into(),
+    ];
+
+    // Create request without tools
+    let request = CreateChatCompletionRequestArgs::default()
+        .model(api_model)
+        .messages(messages)
+        .build()?;
+
+    // Get response from LLM
+    let response_message = client
+        .chat()
+        .create(request)
+        .await?
+        .choices
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No choices in response"))?
+        .message
+        .clone();
+
+    // Return the content
+    if let Some(content) = response_message.content {
+        Ok(content)
+    } else {
+        Err(anyhow::anyhow!("No content in response"))
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "semtools"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2024"
 license = "MIT"
 description = "Semantic search and document parsing tools for the command line"

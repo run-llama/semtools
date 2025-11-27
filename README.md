@@ -64,8 +64,14 @@ ask "What are the main findings?" papers/*.txt
 # Combine parsing and search
 parse my_docs/*.pdf | xargs search "API endpoints"
 
+# Ask a question to a set of files
+ask "Some question?" *.txt 
+
 # Combine parsing with the ask agent
 parse research_papers/*.pdf | xargs ask "Summarize the key methodologies"
+
+# Ask based on stdin content
+cat README.md | ask "How do I install SemTools?"
 ```
 
 Advanced Usage:
@@ -74,13 +80,13 @@ Advanced Usage:
 # Combine with grep for exact-match pre-filtering and distance thresholding
 parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
 
-# Pipeline with content search (note the 'cat')
+# Pipeline with content search (note the 'xargs' on search to search files instead of stdin)
 find . -name "*.md" | xargs parse | xargs search "installation"
 
 # Combine with grep for filtering (grep could be before or after parse/search!)
 parse docs/*.pdf | xargs search "API" | grep -A5 "authentication"
 
-# Save search results
+# Save search results from stdin search
 parse report.pdf | xargs cat | search "summary" > results.txt
 ```
 

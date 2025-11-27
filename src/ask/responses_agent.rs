@@ -8,7 +8,7 @@ use async_openai::types::responses::{
 use model2vec_rs::model::StaticModel;
 use serde_json::Value;
 
-use crate::ask::system_prompt::SYSTEM_PROMPT;
+use crate::ask::system_prompt::{STDIN_SYSTEM_PROMPT, SYSTEM_PROMPT};
 use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
 use crate::search::SearchConfig;
 
@@ -277,4 +277,47 @@ fn output_item_to_item(output_item: &OutputItem) -> Result<Item> {
             output_item
         )),
     }
+}
+
+/// Run an agent with stdin content injected directly using Responses API (no tools available)
+///
+/// # Arguments
+/// * `stdin_content` - The content from stdin to include in the prompt
+/// * `user_message` - The user's query/message
+/// * `client` - OpenAI API client
+/// * `api_model` - The LLM model to use (e.g., "gpt-4.1")
+///
+/// # Returns
+/// The response from the agent as a String
+pub async fn ask_agent_responses_with_stdin(
+    stdin_content: &str,
+    user_message: &str,
+    client: &Client<OpenAIConfig>,
+    api_model: &str,
+) -> Result<String> {
+    // Construct the user message with stdin content
+    let full_message = format!(
+        "<stdin_content>\n{}\n</stdin_content>\n\n{}",
+        stdin_content, user_message
+    );
+
+    // Initialize input items with user message (no tools)
+    let input_items: Vec<InputItem> = vec![InputItem::text_message(Role::User, &full_message)];
+
+    // Create request without tools
+    let request = CreateResponseArgs::default()
+        .max_output_tokens(4096u32)
+        .model(api_model)
+        .input(InputParam::Items(input_items))
+        .instructions(STDIN_SYSTEM_PROMPT)
+        .store(false)
+        .build()?;
+
+    // Get response from LLM
+    let response = client.responses().create(request).await?;
+
+    // Return the text output
+    Ok(response
+        .output_text()
+        .unwrap_or("<No response>".to_string()))
 }
