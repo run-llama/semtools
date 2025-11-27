@@ -1,0 +1,2 @@
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "target-feature=-avx512f,-avx512cd,-avx512er,-avx512pf,-avx512bw,-avx512dq,-avx512vl"]

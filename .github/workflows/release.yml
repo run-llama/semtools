@@ -90,6 +90,10 @@ jobs:
       if: matrix.target == 'x86_64-apple-darwin'
       run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
+    - name: Set build flags for x86_64 macOS
+      if: matrix.target == 'x86_64-apple-darwin'
+      run: echo "RUSTFLAGS=-C target-feature=-avx512f,-avx512cd,-avx512er,-avx512pf,-avx512bw,-avx512dq,-avx512vl" >> $GITHUB_ENV
+
     - name: Build release binaries
       run: cargo build --release --target ${{ matrix.target }}
 
