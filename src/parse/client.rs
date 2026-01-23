@@ -13,6 +13,12 @@ use crate::parse::error::JobError;
 const DEFAULT_PARSE_TIER: &str = "cost_effective";
 const DEFAULT_PARSE_VERSION: &str = "latest";
 
+#[derive(Debug)]
+pub struct CreateParseJobRetVal {
+    pub job_id: String,
+    pub expand_key: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct JobResponse {
     id: String,
@@ -31,6 +37,18 @@ struct JobStatus {
 #[derive(Debug, Serialize, Deserialize)]
 struct JobResult {
     markdown: Option<Markdown>,
+    text: Option<Text>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Text {
+    pages: Vec<TextPage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TextPage {
+    text: String,
+    page_number: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,13 +96,27 @@ impl Markdown {
     }
 }
 
+impl Text {
+    fn get_content(&self) -> String {
+        let mut content = String::new();
+        for page in &self.pages {
+            content += &page.text;
+            content += "\n\n";
+        }
+        content
+    }
+}
+
 impl JobResult {
     fn get_markdown(&self) -> anyhow::Result<String> {
         match &self.markdown {
             Some(m) => Ok(m.get_content()),
-            None => Err(anyhow::anyhow!(
-                "Could not produce markdown from parsed file"
-            )),
+            None => match &self.text {
+                Some(t) => Ok(t.get_content()),
+                None => Err(anyhow::anyhow!(
+                    "Could not produce a parsing result for the current document"
+                )),
+            },
         }
     }
 }
@@ -106,7 +138,7 @@ impl ParseClient {
         base_url: &str,
         api_key: &str,
         config: &LlamaParseConfig,
-    ) -> Result<String, JobError> {
+    ) -> Result<CreateParseJobRetVal, JobError> {
         let file_path = file_path.to_string();
         let base_url = base_url.to_string();
         let api_key = api_key.to_string();
@@ -119,7 +151,7 @@ impl ParseClient {
                 .create_parse_job(&file_path, &base_url, &api_key, &parse_kwargs)
                 .await
             {
-                Ok(job_id) => return Ok(job_id),
+                Ok(retval) => return Ok(retval),
                 Err(JobError::HttpError(err)) => {
                     last_error = Some(err.to_string());
 
@@ -175,6 +207,7 @@ impl ParseClient {
     pub async fn poll_for_result_with_retry(
         &self,
         job_id: &str,
+        expand_key: &str,
         base_url: &str,
         api_key: &str,
         config: &LlamaParseConfig,
@@ -189,6 +222,7 @@ impl ParseClient {
             match self
                 .poll_for_result(
                     &job_id,
+                    expand_key,
                     &base_url,
                     &api_key,
                     config.max_timeout,
@@ -259,7 +293,7 @@ impl ParseClient {
         base_url: &str,
         api_key: &str,
         parse_kwargs: &HashMap<String, Value>,
-    ) -> Result<String, JobError> {
+    ) -> Result<CreateParseJobRetVal, JobError> {
         let file_content = fs::read(file_path)?;
         let filename = Path::new(file_path).file_name().unwrap().to_str().unwrap();
 
@@ -286,6 +320,16 @@ impl ParseClient {
                 Value::String(DEFAULT_PARSE_VERSION.to_string()),
             );
         }
+        let expand_key = match parse_kwargs.get("tier") {
+            Some(v) => {
+                if v.as_str() == Some("fast") {
+                    "text"
+                } else {
+                    "markdown"
+                }
+            }
+            None => "markdown",
+        };
         let config_text = serde_json::to_string(&configuration)?;
         form = form.text("configuration", config_text);
 
@@ -305,12 +349,16 @@ impl ParseClient {
         }
 
         let job_response: JobResponse = response.json().await?;
-        Ok(job_response.id)
+        Ok(CreateParseJobRetVal {
+            job_id: job_response.id,
+            expand_key: expand_key.to_string(),
+        })
     }
 
     async fn poll_for_result(
         &self,
         job_id: &str,
+        expand_key: &str,
         base_url: &str,
         api_key: &str,
         max_timeout: u64,
@@ -350,7 +398,7 @@ impl ParseClient {
                         .client
                         .get(format!("{base_url}/api/v2/parse/{job_id}"))
                         .header("Authorization", format!("Bearer {api_key}"))
-                        .query(&[("expand", "markdown")])
+                        .query(&[("expand", expand_key)])
                         .send()
                         .await?;
 

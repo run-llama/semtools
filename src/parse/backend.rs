@@ -116,13 +116,19 @@ impl LlamaParseBackend {
         }
 
         // Create job with retry
-        let job_id = client
+        let retval = client
             .create_parse_job_with_retry(&file_path, &base_url, &api_key, &config)
             .await?;
 
         // Poll for result with retry
         let markdown_content = client
-            .poll_for_result_with_retry(&job_id, &base_url, &api_key, &config)
+            .poll_for_result_with_retry(
+                &retval.job_id,
+                &retval.expand_key,
+                &base_url,
+                &api_key,
+                &config,
+            )
             .await?;
 
         // Write results to disk
