@@ -200,10 +200,10 @@ async fn call_tool(
             println!("    ignore_case: {}", ignore_case);
 
             // Max distance and top_k are mutually exclusive
-            if max_distance.is_none() {
-                println!("    top_k: {}", top_k);
+            if let Some(md) = max_distance {
+                println!("    max_distance: {:?}", md);
             } else {
-                println!("    max_distance: {:?}", max_distance.unwrap());
+                println!("    top_k: {}", top_k);
             }
 
             SearchTool::search(files, query, model, config).await
