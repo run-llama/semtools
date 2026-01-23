@@ -81,12 +81,10 @@ impl Markdown {
 impl JobResult {
     fn get_markdown(&self) -> anyhow::Result<String> {
         match &self.markdown {
-            Some(m) => return Ok(m.get_content()),
-            None => {
-                return Err(anyhow::anyhow!(
-                    "Could not produce markdown from parsed file"
-                ));
-            }
+            Some(m) => Ok(m.get_content()),
+            None => Err(anyhow::anyhow!(
+                "Could not produce markdown from parsed file"
+            )),
         }
     }
 }
@@ -289,8 +287,7 @@ impl ParseClient {
             );
         }
         let config_text = serde_json::to_string(&configuration)?;
-        form = form.text("configuration", config_text.clone());
-        dbg!(config_text);
+        form = form.text("configuration", config_text);
 
         let response = self
             .client
