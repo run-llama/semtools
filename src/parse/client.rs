@@ -1,5 +1,6 @@
 use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -9,9 +10,17 @@ use tokio::time::sleep;
 use crate::parse::config::LlamaParseConfig;
 use crate::parse::error::JobError;
 
+const DEFAULT_PARSE_TIER: &str = "cost_effective";
+const DEFAULT_PARSE_VERSION: &str = "latest";
+
 #[derive(Debug, Serialize, Deserialize)]
 struct JobResponse {
     id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct JobGetResponse {
+    job: JobStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,7 +30,65 @@ struct JobStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct JobResult {
+    markdown: Option<Markdown>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Markdown {
+    pages: Vec<MarkdownPage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MarkdownPageSuccess {
     markdown: String,
+    page_number: u32,
+    success: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MarkdownPageFailure {
+    error: String,
+    page_number: u32,
+    success: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum MarkdownPage {
+    Success(MarkdownPageSuccess),
+    Failure(MarkdownPageFailure),
+}
+
+impl Markdown {
+    fn get_content(&self) -> String {
+        let mut content = String::new();
+        for page in &self.pages {
+            match page {
+                MarkdownPage::Success(p) => {
+                    content += &p.markdown;
+                    content += "\n\n";
+                }
+                MarkdownPage::Failure(p) => eprintln!(
+                    "An error occurred while parsing page {:?}: {}",
+                    p.page_number, p.error
+                ),
+            }
+        }
+        content
+    }
+}
+
+impl JobResult {
+    fn get_markdown(&self) -> anyhow::Result<String> {
+        match &self.markdown {
+            Some(m) => return Ok(m.get_content()),
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Could not produce markdown from parsed file"
+                ));
+            }
+        }
+    }
 }
 
 pub struct ParseClient {
@@ -193,7 +260,7 @@ impl ParseClient {
         file_path: &str,
         base_url: &str,
         api_key: &str,
-        parse_kwargs: &HashMap<String, String>,
+        parse_kwargs: &HashMap<String, Value>,
     ) -> Result<String, JobError> {
         let file_content = fs::read(file_path)?;
         let filename = Path::new(file_path).file_name().unwrap().to_str().unwrap();
@@ -208,15 +275,26 @@ impl ParseClient {
             .map_err(|e| JobError::InvalidResponse(e.to_string()))?;
 
         let mut form = multipart::Form::new().part("file", file_part);
-
-        // Add parse kwargs as form data
-        for (key, value) in parse_kwargs {
-            form = form.text(key.clone(), value.clone());
+        let mut configuration = parse_kwargs.clone();
+        if !parse_kwargs.contains_key("tier") {
+            configuration.insert(
+                "tier".to_string(),
+                Value::String(DEFAULT_PARSE_TIER.to_string()),
+            );
         }
+        if !parse_kwargs.contains_key("version") {
+            configuration.insert(
+                "version".to_string(),
+                Value::String(DEFAULT_PARSE_VERSION.to_string()),
+            );
+        }
+        let config_text = serde_json::to_string(&configuration)?;
+        form = form.text("configuration", config_text.clone());
+        dbg!(config_text);
 
         let response = self
             .client
-            .post(format!("{base_url}/api/parsing/upload"))
+            .post(format!("{base_url}/api/v2/parse/upload"))
             .header("Authorization", format!("Bearer {api_key}"))
             .multipart(form)
             .send()
@@ -255,26 +333,27 @@ impl ParseClient {
             // Check job status
             let status_response = self
                 .client
-                .get(format!("{base_url}/api/parsing/job/{job_id}"))
+                .get(format!("{base_url}/api/v2/parse/{job_id}"))
                 .header("Authorization", format!("Bearer {api_key}"))
                 .send()
                 .await?;
 
             if !status_response.status().is_success() {
+                let detail = status_response.text().await?;
+                eprintln!("An error occurred: {}\nRetrying...", detail);
                 continue; // Retry on error
             }
 
-            let job_status: JobStatus = status_response.json().await?;
+            let job_status: JobGetResponse = status_response.json().await?;
 
-            match job_status.status.as_str() {
-                "SUCCESS" => {
+            match job_status.job.status.as_str() {
+                "COMPLETED" => {
                     // Get the result
                     let result_response = self
                         .client
-                        .get(format!(
-                            "{base_url}/api/parsing/job/{job_id}/result/markdown"
-                        ))
+                        .get(format!("{base_url}/api/v2/parse/{job_id}"))
                         .header("Authorization", format!("Bearer {api_key}"))
+                        .query(&[("expand", "markdown")])
                         .send()
                         .await?;
 
@@ -285,22 +364,23 @@ impl ParseClient {
                     }
 
                     let job_result: JobResult = result_response.json().await?;
-                    return Ok(job_result.markdown);
+                    let content = job_result.get_markdown()?;
+                    return Ok(content);
                 }
-                "PENDING" => {
+                "PENDING" | "RUNNING" => {
                     // Continue polling
                     continue;
                 }
-                "ERROR" | "CANCELED" => {
+                "FAILED" | "CANCELLED" => {
                     return Err(JobError::InvalidResponse(format!(
                         "Job failed with status: {}",
-                        job_status.status
+                        job_status.job.status
                     )));
                 }
                 _ => {
                     return Err(JobError::InvalidResponse(format!(
                         "Unknown status: {}",
-                        job_status.status
+                        job_status.job.status
                     )));
                 }
             }

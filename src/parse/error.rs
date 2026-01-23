@@ -7,6 +7,7 @@ pub enum JobError {
     JoinError(tokio::task::JoinError),
     SerializationError(serde_json::Error),
     RetryExhausted(String),
+    MarkdownGetError(anyhow::Error),
 }
 
 impl From<reqwest::Error> for JobError {
@@ -33,6 +34,12 @@ impl From<serde_json::Error> for JobError {
     }
 }
 
+impl From<anyhow::Error> for JobError {
+    fn from(err: anyhow::Error) -> Self {
+        JobError::MarkdownGetError(err)
+    }
+}
+
 impl std::fmt::Display for JobError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -43,6 +50,9 @@ impl std::fmt::Display for JobError {
             JobError::JoinError(err) => write!(f, "Task join error: {err}"),
             JobError::SerializationError(err) => write!(f, "Serialization error: {err}"),
             JobError::RetryExhausted(msg) => write!(f, "Retry attempts exhausted: {msg}"),
+            JobError::MarkdownGetError(_) => {
+                write!(f, "Could not produced markdown content for the parsed file")
+            }
         }
     }
 }
