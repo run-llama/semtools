@@ -5721,7 +5721,7 @@ dependencies = [
 
 [[package]]
 name = "semtools"
-version = "1.5.1"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "arrow-array",
