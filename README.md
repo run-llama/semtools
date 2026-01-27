@@ -204,7 +204,7 @@ SemTools uses a unified configuration file at `~/.semtools_config.json` that con
 
 ### Unified Configuration File
 
-Create a `~/.semtools_config.json` file with settings for the tools you use. All sections are optional - if not specified, sensible defaults will be used.
+Create a `~/.semtools_config.json` file with settings for the tools you use. All sections are optional - if not specified, sensible defaults will be used. (They `parse_kwargs` section is passed directly to LlamaParse, [see docs](https://api.cloud.llamaindex.ai/docs#/V2/parse_file_api_v2_parse_post) for available options.)
 
 ```json
 {
@@ -215,51 +215,6 @@ Create a `~/.semtools_config.json` file with settings for the tools you use. All
     "parse_kwargs": {
       "tier": "agentic",
       "version": "latest",
-      "processing_options": {
-          "ignore": {
-              "ignore_diagonal_text": true,
-              "ignore_text_in_image": false
-          },
-          "ocr_parameters": {
-              "languages": ["en", "es"]
-          }
-      },
-      "agentic_options": {
-          "custom_prompt": "Translate everything to French"
-      },
-      "page_ranges": {
-          "max_pages": 20,
-          "target_pages": "1-5,10,15-20"
-      },
-      "crop_box": {
-          "top": 0.05,
-          "bottom": 0.95,
-          "left": 0.05,
-          "right": 0.95
-      },
-      "output_options": {
-          "markdown": {
-              "annotate_links": true,
-              "tables": {
-                "output_tables_as_markdown": true
-              }
-          },
-          "images_to_save": ["screenshot"]
-      },
-      "webhook_configurations": [
-          {
-            "webhook_url": "https://example.com/webhook",
-            "webhook_events": ["parse.done"]
-          }
-        ],
-      "processing_control": {
-          "timeouts": {
-              "base_in_seconds": 600
-          },
-          "job_failure_conditions": {
-              "allowed_page_failure_ratio": 0.05
-            }
-      },
       "disable_cache": false
     },
     "check_interval": 5,
