@@ -10,6 +10,8 @@ We welcome contributions to SemTools! This document provides guidelines for cont
 - Git
 - For the parse tool: LlamaIndex Cloud API key (for testing)
 
+You might also need `protobuf` in order to build this project ([installation guide](https://google.github.io/proto-lens/installing-protoc.html)).
+
 ### Development Setup
 
 1. **Clone the repository**
@@ -253,4 +255,4 @@ Contributors will be acknowledged in:
 - **README.md** contributors section
 - **Release notes** for major features
 
-Thank you for contributing to SemTools! 🎉 
+Thank you for contributing to SemTools! 🎉

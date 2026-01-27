@@ -213,12 +213,54 @@ Create a `~/.semtools_config.json` file with settings for the tools you use. All
     "num_ongoing_requests": 10,
     "base_url": "https://api.cloud.llamaindex.ai",
     "parse_kwargs": {
-      "parse_mode": "parse_page_with_agent",
-      "model": "openai-gpt-4-1-mini",
-      "high_res_ocr": "true",
-      "adaptive_long_table": "true",
-      "outlined_table_extraction": "true",
-      "output_tables_as_HTML": "true"
+      "tier": "agentic",
+      "version": "latest",
+      "processing_options": {
+          "ignore": {
+              "ignore_diagonal_text": true,
+              "ignore_text_in_image": false
+          },
+          "ocr_parameters": {
+              "languages": ["en", "es"]
+          }
+      },
+      "agentic_options": {
+          "custom_prompt": "Translate everything to French"
+      },
+      "page_ranges": {
+          "max_pages": 20,
+          "target_pages": "1-5,10,15-20"
+      },
+      "crop_box": {
+          "top": 0.05,
+          "bottom": 0.95,
+          "left": 0.05,
+          "right": 0.95
+      },
+      "output_options": {
+          "markdown": {
+              "annotate_links": true,
+              "tables": {
+                "output_tables_as_markdown": true
+              }
+          },
+          "images_to_save": ["screenshot"]
+      },
+      "webhook_configurations": [
+          {
+            "webhook_url": "https://example.com/webhook",
+            "webhook_events": ["parse.done"]
+          }
+        ],
+      "processing_control": {
+          "timeouts": {
+              "base_in_seconds": 600
+          },
+          "job_failure_conditions": {
+              "allowed_page_failure_ratio": 0.05
+            }
+      },
+      "disable_cache": false
     },
     "check_interval": 5,
     "max_timeout": 3600,
@@ -235,6 +277,8 @@ Create a `~/.semtools_config.json` file with settings for the tools you use. All
   }
 }
 ```
+
+Find out more about parsing configuration [on the dedicated documentation page](https://developers.llamaindex.ai/python/cloud/llamaparse/api-v2-guide/).
 
 See `example_semtools_config.json` in the repository for a complete example.
 

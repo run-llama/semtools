@@ -1,0 +1,41 @@
+{
+  "parse": {
+    "num_ongoing_requests": 10,
+    "base_url": "https://api.cloud.llamaindex.ai",
+    "parse_kwargs": {
+      "tier": "agentic",
+      "version": "latest",
+      "processing_options": {
+        "ignore": {
+          "ignore_diagonal_text": true,
+          "ignore_text_in_image": false
+        },
+        "ocr_parameters": {
+          "languages": ["en"]
+        }
+      },
+      "output_options": {
+        "markdown": {
+          "annotate_links": true,
+          "tables": {
+            "output_tables_as_markdown": true
+          }
+        }
+      },
+      "processing_control": {
+        "timeouts": {
+          "base_in_seconds": 600
+        },
+        "job_failure_conditions": {
+          "allowed_page_failure_ratio": 0.05
+        }
+      },
+      "disable_cache": false
+    },
+    "check_interval": 5,
+    "max_timeout": 3600,
+    "max_retries": 10,
+    "retry_delay_ms": 1000,
+    "backoff_multiplier": 2.0
+  }
+}
