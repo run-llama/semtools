@@ -9,6 +9,7 @@ use semtools::SemtoolsConfig;
 use semtools::ask::chat_agent::{ask_agent, ask_agent_with_stdin};
 use semtools::ask::responses_agent::{ask_agent_responses, ask_agent_responses_with_stdin};
 use semtools::config::ApiMode;
+use semtools::json_mode::ErrorOutput;
 use semtools::search::MODEL_NAME;
 
 #[derive(Parser, Debug)]
@@ -40,6 +41,10 @@ struct Args {
     /// API mode to use: 'chat' or 'responses' (overrides config file)
     #[clap(long)]
     api_mode: Option<String>,
+
+    /// Output results in JSON or text format
+    #[clap(short, long)]
+    json: bool,
 }
 
 fn read_from_stdin() -> Result<Vec<String>> {
@@ -112,7 +117,7 @@ async fn main() -> Result<()> {
             let stdin_content = stdin_lines.join("\n");
 
             // Run the appropriate agent with stdin content (no tools)
-            let response = match api_mode {
+            let output = match api_mode {
                 ApiMode::Chat => {
                     ask_agent_with_stdin(&stdin_content, &args.query, &client, &model_name).await?
                 }
@@ -127,16 +132,33 @@ async fn main() -> Result<()> {
                 }
             };
 
-            println!("\n{}", response);
+            if args.json {
+                let json_output = serde_json::to_string_pretty(&output)?;
+                println!("\n{}", json_output);
+            }
+            else {
+                println!("\n{}", output.response);
+            }
+
             return Ok(());
         }
     }
 
     // If no stdin, we need files to search through
     if args.files.is_empty() {
-        eprintln!(
-            "Error: No input provided. Either specify files as arguments or pipe input to stdin."
-        );
+        let error_msg = "No input provided. Either specify files as arguments or pipe input to stdin.";
+        if args.json {
+            let error_output = ErrorOutput {
+                error: error_msg.to_string(),
+                error_type: "NoInput".to_string(),
+            };
+            let json_output = serde_json::to_string_pretty(&error_output)?;
+            eprintln!("{}", json_output);
+            std::process::exit(1);
+        }
+        else {
+            eprintln!("{}", error_msg);
+        }
         std::process::exit(1);
     }
 
@@ -149,7 +171,7 @@ async fn main() -> Result<()> {
     )?;
 
     // Run the appropriate agent based on API mode
-    let response = match api_mode {
+    let output = match api_mode {
         ApiMode::Chat => {
             ask_agent(
                 args.files,
@@ -174,7 +196,13 @@ async fn main() -> Result<()> {
         }
     };
 
-    println!("\n{}", response);
+    if args.json {
+        let json_output = serde_json::to_string_pretty(&output)?;
+        println!("\n{}", json_output);
+    }
+    else {
+        println!("\n{}", output.response);
+    }
 
     Ok(())
 }

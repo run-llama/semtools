@@ -1,3 +1,5 @@
+use std::vec;
+
 use anyhow::Result;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
@@ -11,6 +13,7 @@ use serde_json::Value;
 
 use crate::ask::system_prompt::{STDIN_SYSTEM_PROMPT, SYSTEM_PROMPT};
 use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
+use crate::json_mode::AskOutput;
 use crate::search::SearchConfig;
 
 /// Run an agent loop with the search and read tools
@@ -32,8 +35,13 @@ pub async fn ask_agent(
     client: &Client<OpenAIConfig>,
     api_model: &str,
     max_iterations: Option<usize>,
-) -> Result<String> {
+) -> Result<AskOutput> {
     let max_iterations = max_iterations.unwrap_or(20);
+    let mut result = AskOutput {
+        query: user_message.to_string(),
+        response: String::new(),
+        files_searched: vec![],
+    };
 
     // Build the tools
     let tools: Vec<ChatCompletionTools> = vec![
@@ -82,7 +90,7 @@ pub async fn ask_agent(
                     let args = &tool_call.function.arguments;
 
                     // Call the appropriate tool
-                    let response_content = call_tool(name, args, &files, model).await?;
+                    let response_content = call_tool(name, args, &files, model, &mut result).await?;
 
                     // Print summary of the tool response
                     print_tool_summary(&response_content);
@@ -113,7 +121,8 @@ pub async fn ask_agent(
         } else {
             // No tool calls - we have a final response
             if let Some(content) = response_message.content {
-                return Ok(content);
+                result.response = content.clone();
+                return Ok(result);
             } else {
                 return Err(anyhow::anyhow!("No content in final response"));
             }
@@ -132,6 +141,7 @@ async fn call_tool(
     args: &str,
     files: &[String],
     model: &StaticModel,
+    cur_output: &mut AskOutput,
 ) -> Result<String> {
     let function_args: Value = serde_json::from_str(args)?;
 
@@ -148,6 +158,15 @@ async fn call_tool(
                         .collect()
                 });
 
+            // Update files_searched in cur_output
+            if let Some(paths) = file_paths.clone() {
+                for path in paths {
+                    if !cur_output.files_searched.contains(&path) {
+                        cur_output.files_searched.push(path);
+                    }
+                }
+            }
+            
             let is_regex = function_args["is_regex"].as_bool().unwrap_or(false);
             let case_sensitive = function_args["case_sensitive"].as_bool().unwrap_or(true);
             let context_lines = function_args["context_lines"].as_u64().unwrap_or(3) as usize;
@@ -206,7 +225,7 @@ async fn call_tool(
                 println!("    top_k: {}", top_k);
             }
 
-            SearchTool::search(files, query, model, config).await
+            SearchTool::search(files, query, model, config, &mut cur_output.files_searched).await
         }
         "read" => {
             let path = function_args["path"]
@@ -278,12 +297,17 @@ pub async fn ask_agent_with_stdin(
     user_message: &str,
     client: &Client<OpenAIConfig>,
     api_model: &str,
-) -> Result<String> {
+) -> Result<AskOutput> {
     // Construct the user message with stdin content
     let full_message = format!(
         "<stdin_content>\n{}\n</stdin_content>\n\n{}",
         stdin_content, user_message
     );
+    let mut result = AskOutput {
+        query: user_message.to_string(),
+        response: String::new(),
+        files_searched: vec!["<stdin>".to_string()],
+    };
 
     // Initialize messages with system prompt and user message (no tools)
     let messages: Vec<ChatCompletionRequestMessage> = vec![
@@ -313,7 +337,8 @@ pub async fn ask_agent_with_stdin(
 
     // Return the content
     if let Some(content) = response_message.content {
-        Ok(content)
+        result.response = content;
+        Ok(result)
     } else {
         Err(anyhow::anyhow!("No content in response"))
     }

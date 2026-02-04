@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use crate::ask::system_prompt::{STDIN_SYSTEM_PROMPT, SYSTEM_PROMPT};
 use crate::ask::tools::{AgentTool, GrepTool, ReadTool, SearchTool};
+use crate::json_mode::AskOutput;
 use crate::search::SearchConfig;
 
 /// Run an agent loop with the search and read tools using the Responses API
@@ -24,7 +25,7 @@ use crate::search::SearchConfig;
 /// * `max_iterations` - Maximum number of agent loop iterations (default: 20)
 ///
 /// # Returns
-/// The final response from the agent as a String
+/// AskOutput containing the query, response, and files searched
 pub async fn ask_agent_responses(
     files: Vec<String>,
     user_message: &str,
@@ -32,8 +33,9 @@ pub async fn ask_agent_responses(
     client: &Client<OpenAIConfig>,
     api_model: &str,
     max_iterations: Option<usize>,
-) -> Result<String> {
+) -> Result<AskOutput> {
     let max_iterations = max_iterations.unwrap_or(20);
+    let mut files_searched: Vec<String> = Vec::new();
 
     // Build the tools using the responses API format
     let tools: Vec<Tool> = vec![
@@ -91,7 +93,7 @@ pub async fn ask_agent_responses(
                 let args = &function_call.arguments;
 
                 // Call the appropriate tool
-                let response_content = call_tool(name, args, &files, model).await?;
+                let response_content = call_tool(name, args, &files, model, &mut files_searched).await?;
 
                 // Print summary of the tool response
                 print_tool_summary(&response_content);
@@ -108,16 +110,27 @@ pub async fn ask_agent_responses(
             }
         } else {
             // No tool calls - we have a final response
-            return Ok(response
+            let response_text = response
                 .output_text()
-                .unwrap_or("<No response>".to_string()));
+                .unwrap_or("<No response>".to_string());
+
+            return Ok(AskOutput {
+                query: user_message.to_string(),
+                response: response_text,
+                files_searched,
+            });
         }
     }
 
-    Err(anyhow::anyhow!(
-        "Max iterations ({}) reached without final response",
-        max_iterations
-    ))
+    // If we reach here, max iterations was hit
+    Ok(AskOutput {
+        query: user_message.to_string(),
+        response: format!(
+            "Max iterations ({}) reached without final response",
+            max_iterations
+        ),
+        files_searched,
+    })
 }
 
 /// Call a tool by name with the given arguments
@@ -126,6 +139,7 @@ async fn call_tool(
     args: &str,
     files: &[String],
     model: &StaticModel,
+    files_searched: &mut Vec<String>,
 ) -> Result<String> {
     let function_args: Value = serde_json::from_str(args)?;
 
@@ -141,6 +155,15 @@ async fn call_tool(
                         .filter_map(|v| v.as_str().map(|s| s.to_string()))
                         .collect()
                 });
+
+            // Update files_searched
+            if let Some(paths) = file_paths.clone() {
+                for path in paths {
+                    if !files_searched.contains(&path) {
+                        files_searched.push(path);
+                    }
+                }
+            }
 
             let is_regex = function_args["is_regex"].as_bool().unwrap_or(false);
             let case_sensitive = function_args["case_sensitive"].as_bool().unwrap_or(true);
@@ -200,7 +223,7 @@ async fn call_tool(
                 println!("    top_k: {}", top_k);
             }
 
-            SearchTool::search(files, query, model, config).await
+            SearchTool::search(files, query, model, config, files_searched).await
         }
         "read" => {
             let path = function_args["path"]
@@ -293,13 +316,13 @@ fn output_item_to_item(output_item: &OutputItem) -> Result<Item> {
 /// * `api_model` - The LLM model to use (e.g., "gpt-4.1")
 ///
 /// # Returns
-/// The response from the agent as a String
+/// AskOutput containing the query, response, and "<stdin>" as the file searched
 pub async fn ask_agent_responses_with_stdin(
     stdin_content: &str,
     user_message: &str,
     client: &Client<OpenAIConfig>,
     api_model: &str,
-) -> Result<String> {
+) -> Result<AskOutput> {
     // Construct the user message with stdin content
     let full_message = format!(
         "<stdin_content>\n{}\n</stdin_content>\n\n{}",
@@ -325,8 +348,14 @@ pub async fn ask_agent_responses_with_stdin(
     // Get response from LLM
     let response = client.responses().create(request).await?;
 
-    // Return the text output
-    Ok(response
+    // Return AskOutput with stdin as the file searched
+    let response_text = response
         .output_text()
-        .unwrap_or("<No response>".to_string()))
+        .unwrap_or("<No response>".to_string());
+
+    Ok(AskOutput {
+        query: user_message.to_string(),
+        response: response_text,
+        files_searched: vec!["<stdin>".to_string()],
+    })
 }

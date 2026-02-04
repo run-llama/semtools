@@ -9,6 +9,7 @@ use semtools::workspace::{Workspace, store::RankedLine};
 #[cfg(feature = "workspace")]
 use semtools::search::search_with_workspace;
 
+use semtools::json_mode::{ErrorOutput, SearchOutput, SearchResultJSON};
 use semtools::search::{
     Document, MODEL_NAME, SearchConfig, SearchResult, search_documents, search_files,
 };
@@ -38,12 +39,28 @@ struct Args {
     /// Perform case-insensitive search (default is false)
     #[arg(short, long, default_value_t = false)]
     ignore_case: bool,
+
+    /// Output results in JSON format
+    #[clap(short, long)]
+    json: bool,
 }
 
 fn read_from_stdin() -> Result<Vec<String>> {
     let stdin = io::stdin();
     let lines: Result<Vec<String>, _> = stdin.lock().lines().collect();
     Ok(lines?)
+}
+
+// Convert SearchResult to SearchResultJSON
+fn search_result_to_json(result: &SearchResult) -> SearchResultJSON {
+    SearchResultJSON {
+        filename: result.filename.clone(),
+        start_line_number: result.start,
+        end_line_number: result.end,
+        match_line_number: result.match_line,
+        distance: result.distance,
+        content: result.lines.join("\n"),
+    }
 }
 
 // Extracted function to format and print results
@@ -168,35 +185,113 @@ async fn main() -> Result<()> {
             }];
 
             let search_results = search_documents(&documents, &query_embedding, &config);
-            print_search_results(&search_results);
+
+            if args.json {
+                let output = SearchOutput {
+                    results: search_results.iter().map(search_result_to_json).collect(),
+                };
+                let json_output = serde_json::to_string_pretty(&output)?;
+                println!("{}", json_output);
+            } else {
+                print_search_results(&search_results);
+            }
+
             return Ok(());
         }
     }
 
     if args.files.is_empty() {
-        eprintln!(
-            "Error: No input provided. Either specify files as arguments or pipe input to stdin."
-        );
+        let error_msg = "No input provided. Either specify files as arguments or pipe input to stdin.";
+        if args.json {
+            let error_output = ErrorOutput {
+                error: error_msg.to_string(),
+                error_type: "NoInput".to_string(),
+            };
+            let json_output = serde_json::to_string_pretty(&error_output)?;
+            eprintln!("{}", json_output);
+        } else {
+            eprintln!("Error: {}", error_msg);
+        }
         std::process::exit(1);
     }
 
     // Handle file input with optional workspace integration
     #[cfg(feature = "workspace")]
-    if Workspace::active().is_ok() {
-        // Workspace mode: use persisted line embeddings for speed
-        let config = SearchConfig {
-            n_lines: args.n_lines,
-            top_k: args.top_k,
-            max_distance: args.max_distance,
-            ignore_case: args.ignore_case,
-        };
-        let ranked_lines = search_with_workspace(&args.files, &query, &model, &config).await?;
+    {
+        if Workspace::active().is_ok() {
+            // Workspace mode: use persisted line embeddings for speed
+            let config = SearchConfig {
+                n_lines: args.n_lines,
+                top_k: args.top_k,
+                max_distance: args.max_distance,
+                ignore_case: args.ignore_case,
+            };
+            let ranked_lines = search_with_workspace(&args.files, &query, &model, &config).await?;
 
-        // Step 5: Convert results to SearchResult format and print
-        print_workspace_search_results(&ranked_lines, args.n_lines);
-    } else {
+            if args.json {
+                // Convert workspace results to SearchResultJSON
+                let results: Vec<SearchResultJSON> = ranked_lines
+                    .iter()
+                    .map(|ranked_line| {
+                        let match_line_number = ranked_line.line_number as usize;
+                        let start = match_line_number.saturating_sub(args.n_lines);
+                        let end = match_line_number + args.n_lines + 1;
+
+                        // Read file content for the result
+                        let content = if let Ok(file_content) = std::fs::read_to_string(&ranked_line.path) {
+                            let lines: Vec<&str> = file_content.lines().collect();
+                            let actual_start = start;
+                            let actual_end = end.min(lines.len());
+                            lines[actual_start..actual_end].join("\n")
+                        } else {
+                            "[Error: Could not read file content]".to_string()
+                        };
+
+                        SearchResultJSON {
+                            filename: ranked_line.path.clone(),
+                            start_line_number: start,
+                            end_line_number: end,
+                            match_line_number,
+                            distance: ranked_line.distance as f64,
+                            content,
+                        }
+                    })
+                    .collect();
+
+                let output = SearchOutput { results };
+                let json_output = serde_json::to_string_pretty(&output)?;
+                println!("{}", json_output);
+            } else {
+                print_workspace_search_results(&ranked_lines, args.n_lines);
+            }
+        } else {
+            let search_results = search_files(&args.files, &query, &model, &config)?;
+
+            if args.json {
+                let output = SearchOutput {
+                    results: search_results.iter().map(search_result_to_json).collect(),
+                };
+                let json_output = serde_json::to_string_pretty(&output)?;
+                println!("{}", json_output);
+            } else {
+                print_search_results(&search_results);
+            }
+        }
+    }
+
+    #[cfg(not(feature = "workspace"))]
+    {
         let search_results = search_files(&args.files, &query, &model, &config)?;
-        print_search_results(&search_results);
+
+        if args.json {
+            let output = SearchOutput {
+                results: search_results.iter().map(search_result_to_json).collect(),
+            };
+            let json_output = serde_json::to_string_pretty(&output)?;
+            println!("{}", json_output);
+        } else {
+            print_search_results(&search_results);
+        }
     }
 
     Ok(())

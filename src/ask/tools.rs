@@ -210,6 +210,7 @@ impl SearchTool {
         query: &str,
         model: &StaticModel,
         config: SearchConfig,
+        files_searched: &mut Vec<String>,
     ) -> Result<String> {
         let query = if config.ignore_case {
             query.to_lowercase()
@@ -229,12 +230,27 @@ impl SearchTool {
             // Workspace mode: use persisted line embeddings for speed
             let ranked_lines = search_with_workspace(files, &query, model, &config).await?;
 
-            // Step 5: Convert results to SearchResult format and print
+            // Track files that were searched (have results)
+            for ranked_line in &ranked_lines {
+                if !files_searched.contains(&ranked_line.path) {
+                    files_searched.push(ranked_line.path.clone());
+                }
+            }
+
+            // Convert results to SearchResult format and format
             let formatted = format_ranked_lines(&ranked_lines, config.n_lines);
             return Ok(formatted);
         }
 
         let search_results = search_files(files, &query, model, &config)?;
+
+        // Track files that were searched (have results)
+        for result in &search_results {
+            if !files_searched.contains(&result.filename) {
+                files_searched.push(result.filename.clone());
+            }
+        }
+
         let formatted = format_search_results(&search_results);
 
         Ok(formatted)
