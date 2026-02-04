@@ -93,7 +93,8 @@ pub async fn ask_agent_responses(
                 let args = &function_call.arguments;
 
                 // Call the appropriate tool
-                let response_content = call_tool(name, args, &files, model, &mut files_searched).await?;
+                let response_content =
+                    call_tool(name, args, &files, model, &mut files_searched).await?;
 
                 // Print summary of the tool response
                 print_tool_summary(&response_content);

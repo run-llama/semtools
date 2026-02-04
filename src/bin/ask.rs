@@ -135,8 +135,7 @@ async fn main() -> Result<()> {
             if args.json {
                 let json_output = serde_json::to_string_pretty(&output)?;
                 println!("\n{}", json_output);
-            }
-            else {
+            } else {
                 println!("\n{}", output.response);
             }
 
@@ -146,7 +145,8 @@ async fn main() -> Result<()> {
 
     // If no stdin, we need files to search through
     if args.files.is_empty() {
-        let error_msg = "No input provided. Either specify files as arguments or pipe input to stdin.";
+        let error_msg =
+            "No input provided. Either specify files as arguments or pipe input to stdin.";
         if args.json {
             let error_output = ErrorOutput {
                 error: error_msg.to_string(),
@@ -155,8 +155,7 @@ async fn main() -> Result<()> {
             let json_output = serde_json::to_string_pretty(&error_output)?;
             eprintln!("{}", json_output);
             std::process::exit(1);
-        }
-        else {
+        } else {
             eprintln!("{}", error_msg);
         }
         std::process::exit(1);
@@ -199,8 +198,7 @@ async fn main() -> Result<()> {
     if args.json {
         let json_output = serde_json::to_string_pretty(&output)?;
         println!("\n{}", json_output);
-    }
-    else {
+    } else {
         println!("\n{}", output.response);
     }
 

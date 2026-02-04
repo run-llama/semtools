@@ -201,7 +201,8 @@ async fn main() -> Result<()> {
     }
 
     if args.files.is_empty() {
-        let error_msg = "No input provided. Either specify files as arguments or pipe input to stdin.";
+        let error_msg =
+            "No input provided. Either specify files as arguments or pipe input to stdin.";
         if args.json {
             let error_output = ErrorOutput {
                 error: error_msg.to_string(),
@@ -238,14 +239,15 @@ async fn main() -> Result<()> {
                         let end = match_line_number + args.n_lines + 1;
 
                         // Read file content for the result
-                        let content = if let Ok(file_content) = std::fs::read_to_string(&ranked_line.path) {
-                            let lines: Vec<&str> = file_content.lines().collect();
-                            let actual_start = start;
-                            let actual_end = end.min(lines.len());
-                            lines[actual_start..actual_end].join("\n")
-                        } else {
-                            "[Error: Could not read file content]".to_string()
-                        };
+                        let content =
+                            if let Ok(file_content) = std::fs::read_to_string(&ranked_line.path) {
+                                let lines: Vec<&str> = file_content.lines().collect();
+                                let actual_start = start;
+                                let actual_end = end.min(lines.len());
+                                lines[actual_start..actual_end].join("\n")
+                            } else {
+                                "[Error: Could not read file content]".to_string()
+                            };
 
                         SearchResultJSON {
                             filename: ranked_line.path.clone(),

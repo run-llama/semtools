@@ -50,7 +50,8 @@ async fn main() -> Result<()> {
 
                 if args.json {
                     // Try to get document count from store, or use 0 for new workspace
-                    let total_documents = if let Ok(store) = Store::open(&ws.config.root_dir).await {
+                    let total_documents = if let Ok(store) = Store::open(&ws.config.root_dir).await
+                    {
                         if let Ok(stats) = store.get_stats().await {
                             stats.total_documents
                         } else {

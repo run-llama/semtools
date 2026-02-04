@@ -90,7 +90,8 @@ pub async fn ask_agent(
                     let args = &tool_call.function.arguments;
 
                     // Call the appropriate tool
-                    let response_content = call_tool(name, args, &files, model, &mut result).await?;
+                    let response_content =
+                        call_tool(name, args, &files, model, &mut result).await?;
 
                     // Print summary of the tool response
                     print_tool_summary(&response_content);
@@ -166,7 +167,7 @@ async fn call_tool(
                     }
                 }
             }
-            
+
             let is_regex = function_args["is_regex"].as_bool().unwrap_or(false);
             let case_sensitive = function_args["case_sensitive"].as_bool().unwrap_or(true);
             let context_lines = function_args["context_lines"].as_u64().unwrap_or(3) as usize;

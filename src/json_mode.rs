@@ -13,8 +13,7 @@ pub struct ParseOutput {
     pub results: Vec<ParseResultJSON>,
 }
 
-
-// Search 
+// Search
 #[derive(Debug, Serialize)]
 pub struct SearchResultJSON {
     pub filename: String,
