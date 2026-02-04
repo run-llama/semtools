@@ -168,19 +168,17 @@ async fn main() -> Result<()> {
                     };
                     let json_output = serde_json::to_string_pretty(&output)?;
                     println!("{}", json_output);
+                } else if missing_paths.is_empty() {
+                    println!("No stale documents found. Workspace is clean.");
                 } else {
-                    if missing_paths.is_empty() {
-                        println!("No stale documents found. Workspace is clean.");
-                    } else {
-                        println!("Found {} stale documents:", missing_paths.len());
-                        for path in &missing_paths {
-                            println!("  - {path}");
-                        }
-                        println!(
-                            "Removed {} stale documents from workspace.",
-                            missing_paths.len()
-                        );
+                    println!("Found {} stale documents:", missing_paths.len());
+                    for path in &missing_paths {
+                        println!("  - {path}");
                     }
+                    println!(
+                        "Removed {} stale documents from workspace.",
+                        missing_paths.len()
+                    );
                 }
             }
             #[cfg(not(feature = "workspace"))]
