@@ -3,6 +3,8 @@
 pub mod config;
 pub use config::{AskConfig, SemtoolsConfig};
 
+pub mod json_mode;
+
 #[cfg(feature = "parse")]
 pub mod parse;
 
