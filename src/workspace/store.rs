@@ -1,18 +1,29 @@
-use anyhow::{Context, Result, anyhow, bail};
-use arrow_array::types::Float32Type;
-use arrow_array::{
-    FixedSizeListArray, Float32Array, Float64Array, Int32Array, Int64Array, RecordBatch,
-    RecordBatchIterator, StringArray, UInt64Array,
+//! Qdrant Edge storage wrapper
+use anyhow::{Result, anyhow};
+
+use edge::EdgeShard;
+use ordered_float::OrderedFloat;
+use segment::data_types::vectors::{NamedQuery, VectorInternal, VectorStructInternal};
+use segment::json_path::JsonPath;
+use segment::types::{
+    AnyVariants, Condition, Distance, ExtendedPointId, FieldCondition, Filter, Match, Payload,
+    PayloadStorageType, SegmentConfig, ValueVariants, VectorDataConfig, VectorStorageType,
+    WithPayloadInterface, WithVector,
 };
-use arrow_schema::{DataType, Field, Schema};
-use futures::TryStreamExt;
-use lancedb::index::Index;
-use lancedb::query::{ExecutableQuery, QueryBase};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use shard::count::CountRequestInternal;
+use shard::operations::CollectionUpdateOperations;
+use shard::operations::point_ops::{
+    PointInsertOperationsInternal, PointOperations, PointStructPersisted,
+};
+use shard::query::query_enum::QueryEnum;
+use shard::query::{ScoringQuery, ShardQueryRequest};
+use shard::scroll::ScrollRequestInternal;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::search::DocumentInfo;
 
@@ -23,7 +34,16 @@ use crate::search::DocumentInfo;
 /// we treat all existing documents as version 1.
 pub const CURRENT_EMBEDDING_VERSION: u32 = 2;
 
-#[derive(Debug, Clone)]
+/// Embedding size (needed to inform Qdrant collection when it is instantiated)
+pub const EMBEDDING_SIZE: usize = 256;
+
+/// Vector name used in the documents shard
+const DOCUMENTS_VECTOR_NAME: &str = "documents";
+
+/// Vector name used in the line embeddings shard
+const LINE_EMBEDDINGS_VECTOR_NAME: &str = "line_embeddings";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocMeta {
     pub path: String,
     pub size_bytes: u64,
@@ -38,10 +58,11 @@ pub enum DocumentState {
     New(DocumentInfo),     // Full document info for processing
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LineEmbedding {
     pub path: String,
     pub line_number: i32,
+    #[serde(skip)]
     pub embedding: Vec<f32>,
 }
 
@@ -80,122 +101,153 @@ pub struct WorkspaceStats {
     pub index_type: Option<String>,
 }
 
+/// Metadata stored with each vector.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkPayload {
+    /// Relative file path from repo root
+    pub path: String,
+    /// Chunk index within the file
+    pub chunk_index: usize,
+    /// Starting line number
+    pub start_line: usize,
+    /// Ending line number
+    pub end_line: usize,
+    /// The actual text content
+    pub text: String,
+    /// File hash for change detection
+    pub file_hash: String,
+}
+
+/// A search result.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    /// Score (similarity)
+    pub score: f32,
+    /// The payload
+    pub payload: ChunkPayload,
+}
+
+/// Storage wrapper around Qdrant Edge.
 pub struct Store {
-    db: lancedb::Connection,
+    documents_shard: EdgeShard,
+    line_embeddings_shard: EdgeShard,
 }
 
 impl Store {
-    pub async fn open(workspace_dir: &str) -> Result<Self> {
-        let db_path = Path::new(workspace_dir)
-            .join("documents.lance")
-            .to_string_lossy()
-            .to_string();
-        let db = lancedb::connect(&db_path)
-            .execute()
-            .await
-            .with_context(|| format!("failed to open LanceDB connection at {db_path}"))?;
+    /// Initialize or load storage for a workspace directory
+    pub fn open(workspace_dir: &str) -> Result<Self> {
+        let document_shard_path = Path::new(workspace_dir).join("documents");
 
-        Ok(Self { db })
+        let line_embeddings_shard_path = Path::new(workspace_dir).join("line_embeddings");
+
+        // Create shard directories
+        std::fs::create_dir_all(&document_shard_path)?;
+        std::fs::create_dir_all(&line_embeddings_shard_path)?;
+
+        // Create segment config for the shard
+        let mut vector_data_document_shard = HashMap::new();
+        vector_data_document_shard.insert(
+            DOCUMENTS_VECTOR_NAME.to_string(),
+            VectorDataConfig {
+                size: EMBEDDING_SIZE,
+                distance: Distance::Cosine,
+                storage_type: VectorStorageType::ChunkedMmap,
+                index: Default::default(),
+                quantization_config: None,
+                multivector_config: None,
+                datatype: None,
+            },
+        );
+
+        let segment_config_document_shard = SegmentConfig {
+            vector_data: vector_data_document_shard,
+            sparse_vector_data: HashMap::new(),
+            payload_storage_type: PayloadStorageType::Mmap,
+        };
+
+        let document_shard =
+            EdgeShard::load(&document_shard_path, Some(segment_config_document_shard))?;
+
+        let mut vector_data_line_embeddings_shard = HashMap::new();
+        vector_data_line_embeddings_shard.insert(
+            DOCUMENTS_VECTOR_NAME.to_string(),
+            VectorDataConfig {
+                size: EMBEDDING_SIZE,
+                distance: Distance::Cosine,
+                storage_type: VectorStorageType::ChunkedMmap,
+                index: Default::default(),
+                quantization_config: None,
+                multivector_config: None,
+                datatype: None,
+            },
+        );
+
+        let segment_config_line_embeddings_shard = SegmentConfig {
+            vector_data: vector_data_line_embeddings_shard,
+            sparse_vector_data: HashMap::new(),
+            payload_storage_type: PayloadStorageType::Mmap,
+        };
+
+        let line_embeddings_shard = EdgeShard::load(
+            &line_embeddings_shard_path,
+            Some(segment_config_line_embeddings_shard),
+        )?;
+
+        Ok(Self {
+            documents_shard: document_shard,
+            line_embeddings_shard: line_embeddings_shard,
+        })
     }
 
-    /// Get existing document metadata for the given paths
-    pub async fn get_existing_docs(&self, paths: &[String]) -> Result<HashMap<String, DocMeta>> {
+    pub fn get_existing_docs(&self, paths: &[String]) -> Result<HashMap<String, DocMeta>> {
         let mut existing = HashMap::new();
 
-        // Check if documents table exists
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        if !tables.contains(&"documents".to_string()) {
-            return Ok(existing);
-        }
-
-        let tbl = self
-            .db
-            .open_table("documents")
-            .execute()
-            .await
-            .context("failed to open 'documents' table")?;
-
-        // Query in chunks to avoid overly long IN(...) filters
         for chunk in paths.chunks(1000) {
-            let filter_expr = build_in_filter(chunk);
-
-            let stream = tbl
-                .query()
-                .only_if(filter_expr)
-                .execute()
-                .await
-                .context("failed to execute documents query")?;
-
-            let batches: Vec<RecordBatch> = stream
-                .try_collect()
-                .await
-                .context("failed to collect query result batches")?;
-
-            for batch in batches {
-                let schema = batch.schema();
-                let path_idx = schema
-                    .index_of("path")
-                    .context("missing 'path' column in documents schema")?;
-                let size_idx = schema
-                    .index_of("size_bytes")
-                    .context("missing 'size_bytes' column in documents schema")?;
-                let mtime_idx = schema
-                    .index_of("mtime")
-                    .context("missing 'mtime' column in documents schema")?;
-                // Optional version column (backwards compatibility)
-                let version_idx = schema.index_of("_version").ok();
-
-                let path_array = batch
-                    .column(path_idx)
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'path' column"))?;
-                let size_array = batch
-                    .column(size_idx)
-                    .as_any()
-                    .downcast_ref::<UInt64Array>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'size_bytes' column"))?;
-                let mtime_array = batch
-                    .column(mtime_idx)
-                    .as_any()
-                    .downcast_ref::<Int64Array>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'mtime' column"))?;
-
-                // Handle version column if it exists (backwards compatible)
-                // Prefer UInt32 but allow Int32 fallback.
-                let version_accessor: Option<Vec<u32>> = if let Some(v_idx) = version_idx {
-                    let col = batch.column(v_idx);
-                    if let Some(v) = col.as_any().downcast_ref::<arrow_array::UInt32Array>() {
-                        Some((0..batch.num_rows()).map(|i| v.value(i)).collect())
-                    } else if let Some(v) = col.as_any().downcast_ref::<Int32Array>() {
-                        Some((0..batch.num_rows()).map(|i| v.value(i) as u32).collect())
-                    } else {
-                        return Err(anyhow!("unexpected type for '_version' column"));
+            let scroll_result = self.documents_shard.scroll(ScrollRequestInternal {
+                offset: None,
+                order_by: None,
+                with_vector: WithVector::Bool(false),
+                with_payload: Some(WithPayloadInterface::Bool(true)),
+                filter: Some(Filter {
+                    must: Some(vec![
+                        Condition::Field(FieldCondition::new_match(
+                            JsonPath {
+                                first_key: "path".to_string(),
+                                rest: vec![],
+                            },
+                            Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
+                        )),
+                        Condition::Field(FieldCondition::new_match(
+                            JsonPath {
+                                first_key: "version".to_string(),
+                                rest: vec![],
+                            },
+                            Match::new_value(ValueVariants::Integer(
+                                CURRENT_EMBEDDING_VERSION as i64,
+                            )),
+                        )),
+                    ]),
+                    must_not: None,
+                    should: None,
+                    min_should: None,
+                }),
+                limit: None,
+            });
+            let records = match scroll_result {
+                Ok(r) => {
+                    let (recs, _) = r;
+                    recs
+                }
+                Err(e) => return Err(anyhow!(e.to_string())),
+            };
+            for record in records {
+                match record.payload {
+                    None => {}
+                    Some(r) => {
+                        let meta = payload_to_doc_meta(&r)?;
+                        let path = meta.clone().path;
+                        existing.insert(path, meta);
                     }
-                } else {
-                    None // Missing column → default later
-                };
-
-                for i in 0..batch.num_rows() {
-                    let path = path_array.value(i).to_string();
-                    let size_bytes = size_array.value(i);
-                    let mtime = mtime_array.value(i);
-                    let version = version_accessor.as_ref().map(|v| v[i]).unwrap_or(1); // default for legacy rows
-
-                    existing.insert(
-                        path.clone(),
-                        DocMeta {
-                            path,
-                            size_bytes,
-                            mtime,
-                            _version: version,
-                        },
-                    );
                 }
             }
         }
@@ -203,437 +255,243 @@ impl Store {
         Ok(existing)
     }
 
-    /// Delete documents and all associated line embeddings by path
-    pub async fn delete_documents(&self, paths: &[String]) -> Result<()> {
+    /// Delete document metadata by path
+    pub fn delete_document_metadata(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }
 
-        // Delete from both tables to maintain synchronization
-        self.delete_document_metadata(paths).await?;
-        self.delete_line_embeddings(paths).await?;
+        let mut point_ids: Vec<ExtendedPointId> = vec![];
 
-        Ok(())
-    }
-
-    /// Delete only document metadata by path (internal method)
-    async fn delete_document_metadata(&self, paths: &[String]) -> Result<()> {
-        if paths.is_empty() {
-            return Ok(());
-        }
-
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        if !tables.contains(&"documents".to_string()) {
-            return Ok(()); // Nothing to delete
-        }
-
-        let tbl = self
-            .db
-            .open_table("documents")
-            .execute()
-            .await
-            .context("failed to open 'documents' table")?;
-
-        // Delete in chunks
+        // collect all point IDs to be deleted
         for chunk in paths.chunks(1000) {
-            let filter_expr = build_in_filter(chunk);
-            tbl.delete(&filter_expr).await.with_context(|| {
-                format!("failed to delete documents with filter: {filter_expr}")
-            })?;
+            let scroll_result = self.documents_shard.scroll(ScrollRequestInternal {
+                offset: None,
+                order_by: None,
+                with_vector: WithVector::Bool(false),
+                with_payload: Some(WithPayloadInterface::Bool(true)),
+                filter: Some(Filter {
+                    must: Some(vec![
+                        Condition::Field(FieldCondition::new_match(
+                            JsonPath {
+                                first_key: "path".to_string(),
+                                rest: vec![],
+                            },
+                            Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
+                        )),
+                        Condition::Field(FieldCondition::new_match(
+                            JsonPath {
+                                first_key: "version".to_string(),
+                                rest: vec![],
+                            },
+                            Match::new_value(ValueVariants::Integer(
+                                CURRENT_EMBEDDING_VERSION as i64,
+                            )),
+                        )),
+                    ]),
+                    must_not: None,
+                    should: None,
+                    min_should: None,
+                }),
+                limit: None,
+            });
+            let records = match scroll_result {
+                Ok(r) => {
+                    let (recs, _) = r;
+                    recs
+                }
+                Err(e) => return Err(anyhow!(e.to_string())),
+            };
+            for record in records {
+                point_ids.push(record.id);
+            }
         }
+
+        let operation = CollectionUpdateOperations::PointOperation(PointOperations::DeletePoints {
+            ids: point_ids,
+        });
+
+        self.documents_shard
+            .update(operation)
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         Ok(())
     }
 
     /// Delete line embeddings by path
-    pub async fn delete_line_embeddings(&self, paths: &[String]) -> Result<()> {
+    pub fn delete_line_embeddings(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }
 
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        if !tables.contains(&"line_embeddings".to_string()) {
-            return Ok(()); // Nothing to delete
-        }
+        let mut point_ids: Vec<ExtendedPointId> = vec![];
 
-        let tbl = self
-            .db
-            .open_table("line_embeddings")
-            .execute()
-            .await
-            .context("failed to open 'line_embeddings' table")?;
-
-        // Delete in chunks
+        // collect all point IDs to be deleted
         for chunk in paths.chunks(1000) {
-            let filter_expr = build_in_filter(chunk);
-            tbl.delete(&filter_expr).await.with_context(|| {
-                format!("failed to delete line embeddings with filter: {filter_expr}")
-            })?;
+            let scroll_result = self.line_embeddings_shard.scroll(ScrollRequestInternal {
+                offset: None,
+                order_by: None,
+                with_vector: WithVector::Bool(false),
+                with_payload: Some(WithPayloadInterface::Bool(true)),
+                filter: Some(Filter::new_must(Condition::Field(
+                    FieldCondition::new_match(
+                        JsonPath {
+                            first_key: "path".to_string(),
+                            rest: vec![],
+                        },
+                        Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
+                    ),
+                ))),
+                limit: None,
+            });
+            let records = match scroll_result {
+                Ok(r) => {
+                    let (recs, _) = r;
+                    recs
+                }
+                Err(e) => return Err(anyhow!(e.to_string())),
+            };
+            for record in records {
+                point_ids.push(record.id);
+            }
         }
+
+        let operation = CollectionUpdateOperations::PointOperation(PointOperations::DeletePoints {
+            ids: point_ids,
+        });
+
+        self.line_embeddings_shard
+            .update(operation)
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         Ok(())
     }
 
-    /// Upsert document metadata for tracking file changes (no embeddings stored)
-    pub async fn upsert_document_metadata(&self, metas: &[DocMeta]) -> Result<()> {
+    /// Delete documents and all associated line embeddings by path
+    pub fn delete_documents(&self, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+
+        // Delete from both tables to maintain synchronization
+        self.delete_document_metadata(paths)?;
+        self.delete_line_embeddings(paths)?;
+
+        Ok(())
+    }
+
+    /// Upsert documents metadata (no embeddings stored)
+    pub fn upsert_document_metadata(&self, metas: &[DocMeta]) -> Result<()> {
         if metas.is_empty() {
             return Ok(());
         }
 
-        // First, delete any existing documents with the same paths
-        let paths: Vec<String> = metas.iter().map(|m| m.path.clone()).collect();
-        self.delete_document_metadata(&paths).await?;
+        let mut point_id = self.count_documents()? as u64;
 
-        // Define schema for metadata only
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-            Field::new("path", DataType::Utf8, false),
-            Field::new("size_bytes", DataType::UInt64, false),
-            Field::new("mtime", DataType::Int64, false),
-            Field::new("_version", DataType::UInt32, false),
-        ]));
+        for chunk in metas.chunks(1000) {
+            let mut points: Vec<PointStructPersisted> = vec![];
+            for meta in chunk {
+                point_id += 1_u64;
+                let payload_json =
+                    serde_json::to_value(&meta).map_err(|e| anyhow!(e.to_string()))?;
+                let vector: Vec<f32> = vec![];
+                let point = make_point(point_id, vector, payload_json, DOCUMENTS_VECTOR_NAME);
+                points.push(point);
+            }
+            let operation = CollectionUpdateOperations::PointOperation(
+                PointOperations::UpsertPoints(PointInsertOperationsInternal::PointsList(points)),
+            );
+            self.documents_shard
+                .update(operation)
+                .map_err(|e| anyhow!(e.to_string()))?;
 
-        // Build a single RecordBatch
-        let id_array = Int32Array::from_iter_values(metas.iter().map(|meta| meta.id()));
-        let path_array =
-            StringArray::from(metas.iter().map(|m| m.path.as_str()).collect::<Vec<_>>());
-        let size_bytes_array = UInt64Array::from_iter_values(metas.iter().map(|m| m.size_bytes));
-        let mtime_array = Int64Array::from_iter_values(metas.iter().map(|m| m.mtime));
-        let version_array =
-            arrow_array::UInt32Array::from_iter_values(metas.iter().map(|m| m._version));
-
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(id_array),
-                Arc::new(path_array),
-                Arc::new(size_bytes_array),
-                Arc::new(mtime_array),
-                Arc::new(version_array),
-            ],
-        )?;
-
-        // Wrap into a RecordBatchReader
-        let batches = RecordBatchIterator::new(vec![batch].into_iter().map(Ok), schema.clone());
-
-        // Create table if needed, otherwise open and append
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        let table_existed = tables.contains(&"documents".to_string());
-
-        if !table_existed {
-            // Create table with initial data
-            self.db
-                .create_table("documents", Box::new(batches))
-                .execute()
-                .await
-                .context("failed to create 'documents' table")?;
-        } else {
-            let tbl = self
-                .db
-                .open_table("documents")
-                .execute()
-                .await
-                .context("failed to open 'documents' table")?;
-            tbl.add(Box::new(batches))
-                .execute()
-                .await
-                .context("failed to append batches to 'documents' table")?;
+            // flush to disk
+            self.flush_documents();
         }
 
         Ok(())
     }
 
-    /// Upsert line-level embeddings for documents
-    pub async fn upsert_line_embeddings(&self, line_embeddings: &[LineEmbedding]) -> Result<()> {
+    /// Upsert line embeddings
+    pub fn upsert_line_embeddings(&self, line_embeddings: &[LineEmbedding]) -> Result<()> {
         if line_embeddings.is_empty() {
             return Ok(());
         }
+        let mut point_id = self.count_line_embeddings()? as u64;
 
-        let dim = line_embeddings[0].embedding.len();
-        if dim == 0 {
-            bail!("embeddings must be non-empty vectors");
-        }
-        if line_embeddings.iter().any(|e| e.embedding.len() != dim) {
-            bail!("all embeddings must have equal length");
-        }
+        for chunk in line_embeddings.chunks(1000) {
+            let mut points: Vec<PointStructPersisted> = vec![];
 
-        // First, delete any existing lines with the same paths
-        let paths: Vec<String> = line_embeddings.iter().map(|le| le.path.clone()).collect();
-        let unique_paths: std::collections::HashSet<String> = paths.into_iter().collect();
-        let unique_paths: Vec<String> = unique_paths.into_iter().collect();
-        self.delete_line_embeddings(&unique_paths).await?;
-
-        // Define schema for line embeddings
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-            Field::new("path", DataType::Utf8, false),
-            Field::new("line_number", DataType::Int32, false),
-            Field::new(
-                "vector",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Float32, true)),
-                    dim as i32,
-                ),
-                true,
-            ),
-        ]));
-
-        // Build RecordBatch
-        let id_array = Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.id()));
-        let path_array = StringArray::from(
-            line_embeddings
-                .iter()
-                .map(|le| le.path.as_str())
-                .collect::<Vec<_>>(),
-        );
-        let line_number_array =
-            Int32Array::from_iter_values(line_embeddings.iter().map(|le| le.line_number));
-        let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-            line_embeddings
-                .iter()
-                .map(|le| Some(le.embedding.iter().cloned().map(Some))),
-            dim as i32,
-        );
-
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(id_array),
-                Arc::new(path_array),
-                Arc::new(line_number_array),
-                Arc::new(vector_array),
-            ],
-        )?;
-
-        let batches = RecordBatchIterator::new(vec![batch].into_iter().map(Ok), schema.clone());
-
-        // Create or append to line_embeddings table
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        let table_existed = tables.contains(&"line_embeddings".to_string());
-
-        if !table_existed {
-            self.db
-                .create_table("line_embeddings", Box::new(batches))
-                .execute()
-                .await
-                .context("failed to create 'line_embeddings' table")?;
-        } else {
-            let tbl = self
-                .db
-                .open_table("line_embeddings")
-                .execute()
-                .await
-                .context("failed to open 'line_embeddings' table")?;
-            tbl.add(Box::new(batches))
-                .execute()
-                .await
-                .context("failed to append batches to 'line_embeddings' table")?;
-        }
-
-        // Ensure vector index exists
-        self.ensure_line_vector_index().await?;
-
-        Ok(())
-    }
-
-    /// Ensures vector index exists for line embeddings table
-    async fn ensure_line_vector_index(&self) -> Result<()> {
-        let tbl = self
-            .db
-            .open_table("line_embeddings")
-            .execute()
-            .await
-            .context("failed to open 'line_embeddings' table")?;
-
-        // Check if vector index exists
-        let indices = tbl
-            .list_indices()
-            .await
-            .context("failed to list indices for 'line_embeddings' table")?;
-        let has_vector_index = indices
-            .iter()
-            .any(|idx| idx.columns.contains(&"vector".to_string()));
-
-        if !has_vector_index {
-            // Create new index - handle case where there are too few rows for PQ index
-            match tbl.create_index(&["vector"], Index::Auto).execute().await {
-                Ok(_) => {
-                    // Index created successfully
-                }
-                Err(e) => {
-                    // Check if this is a PQ training error due to insufficient rows
-                    let error_msg = e.to_string();
-                    if error_msg.contains("Not enough rows to train PQ")
-                        || error_msg.contains("Requires 256 rows")
-                    {
-                        // Log a warning but continue - the database will still work without the index
-                        // It will just use brute-force search instead of approximate search
-                        eprintln!(
-                            "Warning: Skipping line embeddings vector index creation due to insufficient data (need at least 256 rows for PQ index). Database will use brute-force search."
-                        );
-                    } else if error_msg.contains("No space left on device") {
-                        return Err(anyhow!(
-                            "Insufficient disk space to create vector index. Consider freeing up space or using a different workspace location."
-                        ));
-                    } else if error_msg.contains("Permission denied") {
-                        return Err(anyhow!(
-                            "Permission denied while creating vector index. Check workspace directory permissions."
-                        ));
-                    } else {
-                        // For other errors, we should still fail
-                        return Err(e.into());
-                    }
-                }
+            for line_embedding in chunk {
+                point_id += 1_u64;
+                let payload_json =
+                    serde_json::to_value(&line_embedding).map_err(|e| anyhow!(e.to_string()))?;
+                let point = make_point(
+                    point_id,
+                    line_embedding.embedding.clone(),
+                    payload_json,
+                    LINE_EMBEDDINGS_VECTOR_NAME,
+                );
+                points.push(point);
             }
-        } else {
-            // Optimize existing index to include new data
-            // This is much faster than recreating the entire index
-            if tbl.optimize(Default::default()).await.is_err() {
-                // If optimization fails, we could fall back to recreating the index
-                // but for now just log and continue
-                eprintln!("Warning: Failed to optimize line embeddings vector index");
-            }
+
+            let operation = CollectionUpdateOperations::PointOperation(
+                PointOperations::UpsertPoints(PointInsertOperationsInternal::PointsList(points)),
+            );
+            self.line_embeddings_shard
+                .update(operation)
+                .map_err(|e| anyhow!(e.to_string()))?;
+
+            // flush to disk
+            self.flush_line_embeddings();
         }
 
         Ok(())
     }
 
-    /// Get statistics about the workspace store
-    pub async fn get_stats(&self) -> Result<WorkspaceStats> {
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-
-        if !tables.contains(&"documents".to_string()) {
-            return Ok(WorkspaceStats {
-                total_documents: 0,
-                has_index: false,
-                index_type: None,
-            });
-        }
-
-        let tbl = self
-            .db
-            .open_table("documents")
-            .execute()
-            .await
-            .context("failed to open 'documents' table")?;
-
-        // Get document count
-        let stream = tbl
-            .query()
-            .execute()
-            .await
-            .context("failed to execute count query on 'documents'")?;
-        let batches: Vec<RecordBatch> = stream
-            .try_collect()
-            .await
-            .context("failed to collect result batches for stats")?;
-        let total_documents = batches.iter().map(|batch| batch.num_rows()).sum();
-
-        // Check if vector index exists
-        let line_tbl = self
-            .db
-            .open_table("line_embeddings")
-            .execute()
-            .await
-            .context("failed to open 'line_embeddings' table")?;
-        let indices = line_tbl
-            .list_indices()
-            .await
-            .context("failed to list indices for 'line_embeddings' table")?;
-        let has_vector_index = indices
-            .iter()
-            .any(|idx| idx.columns.contains(&"vector".to_string()));
-
-        let index_type = if has_vector_index {
-            // LanceDB Auto index creates IVF_PQ for vector columns by default
-            Some("IVF_PQ".to_string())
-        } else {
-            None
-        };
+    /// Get workspace statistics
+    pub fn get_stats(&self) -> Result<WorkspaceStats> {
+        let total_documents = self.count_documents()?;
 
         Ok(WorkspaceStats {
             total_documents,
-            has_index: has_vector_index,
-            index_type,
+            has_index: true,
+            index_type: Some("HNSW".to_string()),
         })
     }
 
-    /// Get all document paths in the workspace
-    pub async fn get_all_document_paths(&self) -> Result<Vec<String>> {
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
+    /// Get paths for all stored documents
+    pub fn get_all_document_paths(&self) -> Result<Vec<String>> {
+        let scroll_result = self
+            .documents_shard
+            .scroll(ScrollRequestInternal {
+                offset: None,
+                order_by: None,
+                with_vector: WithVector::Bool(false),
+                with_payload: Some(WithPayloadInterface::Bool(true)),
+                filter: None,
+                limit: None,
+            })
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        if !tables.contains(&"documents".to_string()) {
-            return Ok(Vec::new());
-        }
+        let (records, _) = scroll_result;
+        let mut paths: Vec<String> = vec![];
 
-        let tbl = self
-            .db
-            .open_table("documents")
-            .execute()
-            .await
-            .context("failed to open 'documents' table")?;
-        let stream = tbl
-            .query()
-            .execute()
-            .await
-            .context("failed to execute query for all document paths")?;
-        let batches: Vec<RecordBatch> = stream
-            .try_collect()
-            .await
-            .context("failed to collect batches for all document paths")?;
-
-        let mut paths = Vec::new();
-        for batch in batches {
-            let schema = batch.schema();
-            let path_idx = schema
-                .index_of("path")
-                .context("missing 'path' column in documents schema")?;
-            let path_array = batch
-                .column(path_idx)
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| anyhow!("unexpected type for 'path' column"))?;
-
-            for i in 0..batch.num_rows() {
-                paths.push(path_array.value(i).to_string());
+        for record in records {
+            match record.payload {
+                Some(p) => {
+                    let doc_meta = payload_to_doc_meta(&p)?;
+                    paths.push(doc_meta.path);
+                }
+                None => {}
             }
         }
 
         Ok(paths)
     }
 
-    /// Search line embeddings directly for precise results
-    pub async fn search_line_embeddings(
+    /// Search within line embeddings
+    pub fn search_line_embeddings(
         &self,
         query_vec: &[f32],
         subset_paths: &[String],
@@ -645,111 +503,57 @@ impl Store {
             return Ok(Vec::new());
         }
 
-        let tables = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .context("failed to list LanceDB tables")?;
-        if !tables.contains(&"line_embeddings".to_string()) {
-            return Ok(Vec::new());
-        }
+        let mut all_results: Vec<RankedLine> = vec![];
 
-        let tbl = self
-            .db
-            .open_table("line_embeddings")
-            .execute()
-            .await
-            .context("failed to open 'line_embeddings' table")?;
-
-        let mut all_results = Vec::new();
-
-        // Search in chunks to avoid overly long IN(...) filters
         for chunk in subset_paths.chunks(1000) {
-            let filter_expr = build_in_filter(chunk);
+            let query: Vec<f32> = query_vec.into();
+            let vector: VectorInternal = query.into();
+            let score_threshold: Option<OrderedFloat<f32>> = match max_distance {
+                Some(max_dist) => Some(OrderedFloat(1_f32 - max_dist)),
+                None => None,
+            };
+            let results = self
+                .line_embeddings_shard
+                .query(ShardQueryRequest {
+                    prefetches: vec![],
+                    query: Some(ScoringQuery::Vector(QueryEnum::Nearest(NamedQuery {
+                        query: vector,
+                        using: Some(LINE_EMBEDDINGS_VECTOR_NAME.to_string()),
+                    }))),
+                    filter: Some(Filter::new_must(Condition::Field(
+                        FieldCondition::new_match(
+                            JsonPath {
+                                first_key: "path".to_string(),
+                                rest: vec![],
+                            },
+                            Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
+                        ),
+                    ))),
+                    score_threshold: score_threshold,
+                    limit: top_k * 2,
+                    offset: 0,
+                    params: None,
+                    with_vector: WithVector::Bool(false),
+                    with_payload: WithPayloadInterface::Bool(true),
+                })
+                .map_err(|e| anyhow!(e.to_string()))?;
 
-            let query = tbl
-                .query()
-                .only_if(filter_expr)
-                .nearest_to(query_vec)
-                .context("failed to set nearest_to on line embeddings query")?
-                .distance_type(lancedb::DistanceType::Cosine)
-                .limit(top_k * 2); // Get more results per chunk to improve global ranking
-
-            let stream = query
-                .execute()
-                .await
-                .context("failed to execute line embeddings search")?;
-
-            let batches: Vec<RecordBatch> = stream
-                .try_collect()
-                .await
-                .context("failed to collect line embeddings search batches")?;
-
-            for batch in batches {
-                let schema = batch.schema();
-
-                let path_idx = schema
-                    .index_of("path")
-                    .context("missing 'path' column in line embeddings result")?;
-                let line_number_idx = schema
-                    .index_of("line_number")
-                    .context("missing 'line_number' column in line embeddings result")?;
-                let distance_idx = schema
-                    .index_of("_distance")
-                    .or_else(|_| schema.index_of("distance"))
-                    .context("missing 'distance' column in line embeddings result")?;
-
-                let path_array = batch
-                    .column(path_idx)
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'path' column"))?;
-                let line_number_array = batch
-                    .column(line_number_idx)
-                    .as_any()
-                    .downcast_ref::<Int32Array>()
-                    .ok_or_else(|| anyhow!("unexpected type for 'line_number' column"))?;
-                let dist_col = batch.column(distance_idx);
-
-                // Handle both f32 and f64 distance types
-                if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float32Array>() {
-                    for i in 0..batch.num_rows() {
-                        let distance = dist_array.value(i);
-                        if let Some(max_dist) = max_distance
-                            && distance > max_dist
-                        {
-                            continue;
-                        }
-
-                        all_results.push(RankedLine {
-                            path: path_array.value(i).to_string(),
-                            line_number: line_number_array.value(i),
-                            distance,
-                        });
+            for result in results {
+                match result.payload {
+                    Some(p) => {
+                        let line_embd = payload_to_line_embedding(&p)?;
+                        let ranked_line = RankedLine {
+                            line_number: line_embd.line_number,
+                            path: line_embd.path,
+                            distance: result.score,
+                        };
+                        all_results.push(ranked_line);
                     }
-                } else if let Some(dist_array) = dist_col.as_any().downcast_ref::<Float64Array>() {
-                    for i in 0..batch.num_rows() {
-                        let distance = dist_array.value(i) as f32;
-                        if let Some(max_dist) = max_distance
-                            && distance > max_dist
-                        {
-                            continue;
-                        }
-
-                        all_results.push(RankedLine {
-                            path: path_array.value(i).to_string(),
-                            line_number: line_number_array.value(i),
-                            distance,
-                        });
-                    }
-                } else {
-                    bail!("unsupported distance column type in line embeddings search");
+                    None => {}
                 }
             }
         }
 
-        // Sort by distance and take global top-k
         all_results.sort_by(|a, b| {
             a.distance
                 .partial_cmp(&b.distance)
@@ -760,12 +564,10 @@ impl Store {
         Ok(all_results)
     }
 
-    pub async fn analyze_document_states(
-        &self,
-        file_paths: &[String],
-    ) -> Result<Vec<DocumentState>> {
+    /// Analyze the state of documents within the workspace
+    pub fn analyze_document_states(&self, file_paths: &[String]) -> Result<Vec<DocumentState>> {
         // Get existing document metadata from workspace
-        let existing_docs = self.get_existing_docs(file_paths).await?;
+        let existing_docs = self.get_existing_docs(file_paths)?;
 
         let mut states = Vec::new();
 
@@ -826,566 +628,94 @@ impl Store {
 
         Ok(states)
     }
-}
 
-pub fn build_in_filter(paths: &[String]) -> String {
-    let escaped: Vec<String> = paths
-        .iter()
-        .map(|p| p.replace('\'', "''"))
-        .map(|p| format!("'{p}'"))
-        .collect();
-    format!("path IN ({})", escaped.join(","))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    // Helper function to create a test store
-    async fn create_test_store() -> (Store, TempDir) {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .expect("Failed to create store");
-        (store, temp_dir)
-    }
-
-    // Helper function to create test documents
-    fn create_test_docs() -> (Vec<DocMeta>, Vec<Vec<f32>>) {
-        let docs = vec![
-            DocMeta {
-                path: "/test/doc1.txt".to_string(),
-                size_bytes: 100,
-                mtime: 1234567890,
-                _version: CURRENT_EMBEDDING_VERSION,
-            },
-            DocMeta {
-                path: "/test/doc2.txt".to_string(),
-                size_bytes: 200,
-                mtime: 1234567891,
-                _version: CURRENT_EMBEDDING_VERSION,
-            },
-            DocMeta {
-                path: "/test/doc3.txt".to_string(),
-                size_bytes: 150,
-                mtime: 1234567892,
-                _version: CURRENT_EMBEDDING_VERSION,
-            },
-        ];
-
-        let embeddings = vec![
-            vec![0.1, 0.2, 0.3, 0.4],
-            vec![0.5, 0.6, 0.7, 0.8],
-            vec![0.9, 1.0, 1.1, 1.2],
-        ];
-
-        (docs, embeddings)
-    }
-
-    #[tokio::test]
-    async fn test_store_creation_and_stats_empty() {
-        let (store, _temp_dir) = create_test_store().await;
-
-        let stats = store.get_stats().await.expect("Failed to get stats");
-
-        assert_eq!(stats.total_documents, 0);
-        assert!(!stats.has_index);
-        assert_eq!(stats.index_type, None);
-    }
-
-    #[tokio::test]
-    async fn test_upsert_documents_and_stats() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, embeddings) = create_test_docs();
-
-        // Insert documents
-        store
-            .upsert_document_metadata(&docs)
-            .await
-            .expect("Failed to upsert documents");
-
-        let line_embeddings: Vec<LineEmbedding> = docs
-            .iter()
-            .enumerate()
-            .map(|(i, doc)| LineEmbedding {
-                path: doc.path.clone(),
-                line_number: i as i32,
-                embedding: embeddings[i].clone(),
+    /// Get the number of indexed points in the documents shard
+    pub fn count_documents(&self) -> Result<usize> {
+        let count = self
+            .documents_shard
+            .count(CountRequestInternal {
+                filter: None,
+                exact: true,
             })
-            .collect();
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        store
-            .upsert_line_embeddings(&line_embeddings)
-            .await
-            .expect("Failed to upsert line embeddings");
+        Ok(count)
+    }
 
-        // Check stats
-        let stats = store.get_stats().await.expect("Failed to get stats");
+    /// Get the number of indexed points in the documents shard
+    pub fn count_line_embeddings(&self) -> Result<usize> {
+        let count = self
+            .line_embeddings_shard
+            .count(CountRequestInternal {
+                filter: None,
+                exact: true,
+            })
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        assert_eq!(stats.total_documents, 3);
-        // Index may or may not be created depending on number of documents
-        // (LanceDB requires 256+ rows for PQ index training)
-        if stats.has_index {
-            assert_eq!(stats.index_type, Some("IVF_PQ".to_string()));
+        Ok(count)
+    }
+
+    /// Flush all documents data to disk.
+    pub fn flush_documents(&self) {
+        self.documents_shard.flush();
+    }
+
+    /// Flush all line embeddings data to disk.
+    pub fn flush_line_embeddings(&self) {
+        self.line_embeddings_shard.flush();
+    }
+}
+
+/// Create a point struct for upserting.
+fn make_point(
+    id: u64,
+    vector: Vec<f32>,
+    payload: Value,
+    vector_name: &str,
+) -> PointStructPersisted {
+    let mut vectors = HashMap::new();
+    vectors.insert(vector_name.to_string(), VectorInternal::from(vector));
+
+    PointStructPersisted {
+        id: ExtendedPointId::NumId(id),
+        vector: VectorStructInternal::Named(vectors).into(),
+        payload: Some(json_to_payload(payload)),
+    }
+}
+
+/// Convert JSON value (DocMeta or LineEmbedding struct) to Qdrant Payload.
+fn json_to_payload(value: Value) -> Payload {
+    if let Value::Object(map) = value {
+        let mut payload = Payload::default();
+        for (k, v) in map {
+            payload.0.insert(k, v);
         }
+        payload
+    } else {
+        Payload::default()
     }
-
-    #[tokio::test]
-    async fn test_get_all_document_paths() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, _embeddings) = create_test_docs();
-
-        // Initially should be empty
-        let paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get document paths");
-        assert!(paths.is_empty());
-
-        // Insert documents
-        store
-            .upsert_document_metadata(&docs)
-            .await
-            .expect("Failed to upsert documents");
-
-        // Should now have paths
-        let paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get document paths");
-
-        assert_eq!(paths.len(), 3);
-        assert!(paths.contains(&"/test/doc1.txt".to_string()));
-        assert!(paths.contains(&"/test/doc2.txt".to_string()));
-        assert!(paths.contains(&"/test/doc3.txt".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_get_existing_docs() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, _embeddings) = create_test_docs();
-
-        // Insert documents
-        store
-            .upsert_document_metadata(&docs)
-            .await
-            .expect("Failed to upsert documents");
-
-        // Test getting existing docs
-        let query_paths = vec![
-            "/test/doc1.txt".to_string(),
-            "/test/doc2.txt".to_string(),
-            "/test/nonexistent.txt".to_string(),
-        ];
-
-        let existing = store
-            .get_existing_docs(&query_paths)
-            .await
-            .expect("Failed to get existing docs");
-
-        assert_eq!(existing.len(), 2);
-        assert!(existing.contains_key("/test/doc1.txt"));
-        assert!(existing.contains_key("/test/doc2.txt"));
-        assert!(!existing.contains_key("/test/nonexistent.txt"));
-
-        // Verify metadata
-        let doc1_meta = existing.get("/test/doc1.txt").unwrap();
-        assert_eq!(doc1_meta.size_bytes, 100);
-        assert_eq!(doc1_meta.mtime, 1234567890);
-    }
-
-    #[tokio::test]
-    async fn test_delete_documents() {
-        let (store, _temp_dir) = create_test_store().await;
-        let (docs, _embeddings) = create_test_docs();
-
-        // Insert documents
-        store
-            .upsert_document_metadata(&docs)
-            .await
-            .expect("Failed to upsert documents");
-
-        // Verify all documents exist
-        let all_paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get document paths");
-        assert_eq!(all_paths.len(), 3);
-
-        // Delete some documents
-        let to_delete = vec!["/test/doc1.txt".to_string(), "/test/doc3.txt".to_string()];
-        store
-            .delete_documents(&to_delete)
-            .await
-            .expect("Failed to delete documents");
-
-        // Verify only doc2 remains
-        let remaining_paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get document paths");
-        assert_eq!(remaining_paths.len(), 1);
-        assert!(remaining_paths.contains(&"/test/doc2.txt".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_upsert_replaces_existing() {
-        let (store, _temp_dir) = create_test_store().await;
-
-        // Insert initial document
-        let initial_doc = DocMeta {
-            path: "/test/doc.txt".to_string(),
-            size_bytes: 100,
-            mtime: 1000,
-            _version: CURRENT_EMBEDDING_VERSION,
-        };
-        let _initial_embedding = [vec![1.0, 2.0, 3.0, 4.0]];
-
-        store
-            .upsert_document_metadata(&[initial_doc])
-            .await
-            .expect("Failed to insert initial document");
-
-        // Verify document exists
-        let paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get paths");
-        assert_eq!(paths.len(), 1);
-
-        // Update the same document
-        let updated_doc = DocMeta {
-            path: "/test/doc.txt".to_string(),
-            size_bytes: 200,
-            mtime: 2000,
-            _version: CURRENT_EMBEDDING_VERSION,
-        };
-        let _updated_embedding = [vec![5.0, 6.0, 7.0, 8.0]];
-
-        store
-            .upsert_document_metadata(&[updated_doc])
-            .await
-            .expect("Failed to update document");
-
-        // Should still have only one document
-        let paths = store
-            .get_all_document_paths()
-            .await
-            .expect("Failed to get paths");
-        assert_eq!(paths.len(), 1);
-
-        // Verify metadata was updated
-        let existing = store
-            .get_existing_docs(&["/test/doc.txt".to_string()])
-            .await
-            .expect("Failed to get existing docs");
-        let doc_meta = existing.get("/test/doc.txt").unwrap();
-        assert_eq!(doc_meta.size_bytes, 200);
-        assert_eq!(doc_meta.mtime, 2000);
-    }
-
-    #[test]
-    fn test_build_in_filter() {
-        let paths = vec![
-            "file1.txt".to_string(),
-            "file2.txt".to_string(),
-            "file with spaces.txt".to_string(),
-            "file'with'quotes.txt".to_string(),
-        ];
-
-        let filter = build_in_filter(&paths);
-
-        assert!(filter.starts_with("path IN ("));
-        assert!(filter.ends_with(")"));
-        assert!(filter.contains("'file1.txt'"));
-        assert!(filter.contains("'file2.txt'"));
-        assert!(filter.contains("'file with spaces.txt'"));
-        // Single quotes should be escaped
-        assert!(filter.contains("'file''with''quotes.txt'"));
-    }
-
-    #[test]
-    fn test_doc_meta_id_generation() {
-        let doc1 = DocMeta {
-            path: "test1.txt".to_string(),
-            size_bytes: 100,
-            mtime: 1000,
-            _version: CURRENT_EMBEDDING_VERSION,
-        };
-        let doc2 = DocMeta {
-            path: "test2.txt".to_string(),
-            size_bytes: 100,
-            mtime: 1000,
-            _version: CURRENT_EMBEDDING_VERSION,
-        };
-
-        let id1 = doc1.id();
-        let id2 = doc2.id();
-
-        // IDs should be different (random generation)
-        assert_ne!(id1, id2);
-        // IDs should be valid i32 values
-        assert!(id1 >= 0);
-        assert!(id2 >= 0);
-    }
-
-    // Helper to create test files for analyze_document_states tests
-    fn create_test_files(temp_dir: &tempfile::TempDir) -> Vec<String> {
-        use std::fs;
-
-        let file1_path = temp_dir.path().join("test1.txt");
-        let file2_path = temp_dir.path().join("test2.txt");
-        let file3_path = temp_dir.path().join("test3.txt");
-
-        fs::write(&file1_path, "This is test file 1\nWith multiple lines").unwrap();
-        fs::write(&file2_path, "This is test file 2\nWith different content").unwrap();
-        fs::write(&file3_path, "This is test file 3\nWith more content").unwrap();
-
-        vec![
-            file1_path.to_string_lossy().to_string(),
-            file2_path.to_string_lossy().to_string(),
-            file3_path.to_string_lossy().to_string(),
-        ]
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_all_new() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_paths = create_test_files(&temp_dir);
-
-        // Create empty store
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-
-        assert_eq!(states.len(), 3);
-
-        // All should be new documents
-        for state in &states {
-            if let DocumentState::New(doc_info) = state {
-                assert!(file_paths.contains(&doc_info.filename));
-                assert!(!doc_info.content.is_empty());
-                assert!(doc_info.meta.size_bytes > 0);
-                assert!(doc_info.meta.mtime > 0);
-            } else {
-                panic!("Expected New document state");
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_unchanged() {
-        use std::fs;
-        use std::time::UNIX_EPOCH;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_paths = create_test_files(&temp_dir);
-
-        // Create store and add documents
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        // Insert documents with current metadata
-        let mut docs = Vec::new();
-        for path in &file_paths {
-            let metadata = fs::metadata(path).unwrap();
-            let doc_meta = DocMeta {
-                path: path.clone(),
-                size_bytes: metadata.len(),
-                mtime: metadata
-                    .modified()
-                    .unwrap()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-                _version: CURRENT_EMBEDDING_VERSION,
-            };
-            docs.push(doc_meta);
-        }
-        store.upsert_document_metadata(&docs).await.unwrap();
-
-        // Analyze states - should all be unchanged
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-
-        assert_eq!(states.len(), 3);
-
-        for state in &states {
-            if let DocumentState::Unchanged(filename) = state {
-                assert!(file_paths.contains(filename));
-            } else {
-                panic!("Expected Unchanged document state");
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_changed() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_paths = create_test_files(&temp_dir);
-
-        // Create store and add documents with old metadata
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        let mut docs = Vec::new();
-        for path in &file_paths {
-            let doc_meta = DocMeta {
-                path: path.clone(),
-                size_bytes: 10, // Different from actual size
-                mtime: 1000,    // Old timestamp
-                _version: 1,    // simulate old version
-            };
-            docs.push(doc_meta);
-        }
-        store.upsert_document_metadata(&docs).await.unwrap();
-
-        // Analyze states - should all be changed
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-
-        assert_eq!(states.len(), 3);
-
-        for state in &states {
-            if let DocumentState::Changed(doc_info) = state {
-                assert!(file_paths.contains(&doc_info.filename));
-                assert!(!doc_info.content.is_empty());
-            } else {
-                panic!("Expected Changed document state");
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_mixed() {
-        use std::fs;
-        use std::time::UNIX_EPOCH;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_paths = create_test_files(&temp_dir);
-
-        // Create store and add only the first document
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        let metadata = fs::metadata(&file_paths[0]).unwrap();
-        let doc_meta = DocMeta {
-            path: file_paths[0].clone(),
-            size_bytes: metadata.len(),
-            mtime: metadata
-                .modified()
-                .unwrap()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
-            _version: CURRENT_EMBEDDING_VERSION,
-        };
-        store.upsert_document_metadata(&[doc_meta]).await.unwrap();
-
-        // Analyze states
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-
-        assert_eq!(states.len(), 3);
-
-        // First should be unchanged, others should be new
-        let mut unchanged_count = 0;
-        let mut new_count = 0;
-
-        for state in &states {
-            match state {
-                DocumentState::Unchanged(filename) => {
-                    assert_eq!(filename, &file_paths[0]);
-                    unchanged_count += 1;
-                }
-                DocumentState::New(doc_info) => {
-                    assert!(file_paths[1..].contains(&doc_info.filename));
-                    new_count += 1;
-                }
-                _ => panic!("Unexpected document state"),
-            }
-        }
-
-        assert_eq!(unchanged_count, 1);
-        assert_eq!(new_count, 2);
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_version_mismatch() {
-        use std::fs;
-        use std::time::UNIX_EPOCH;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_paths = create_test_files(&temp_dir);
-
-        // Create store and add documents with old version but correct size/mtime
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        let mut old_docs = Vec::new();
-        for path in &file_paths {
-            let metadata = fs::metadata(path).unwrap();
-            let doc_meta = DocMeta {
-                path: path.clone(),
-                size_bytes: metadata.len(),
-                mtime: metadata
-                    .modified()
-                    .unwrap()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-                _version: 1, // older version than CURRENT_EMBEDDING_VERSION (2)
-            };
-            old_docs.push(doc_meta);
-        }
-        store.upsert_document_metadata(&old_docs).await.unwrap();
-
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-        assert_eq!(states.len(), 3);
-        for state in &states {
-            match state {
-                DocumentState::Changed(info) => {
-                    assert!(file_paths.contains(&info.filename));
-                }
-                _ => panic!("Expected Changed state due to version mismatch"),
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_analyze_document_states_nonexistent_file() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let mut file_paths = create_test_files(&temp_dir);
-
-        // Add a nonexistent file to the list
-        file_paths.push("/nonexistent/file.txt".to_string());
-
-        let store = Store::open(temp_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
-
-        let states = store.analyze_document_states(&file_paths).await.unwrap();
-
-        // Should only have states for existing files
-        assert_eq!(states.len(), 3);
-
-        for state in &states {
-            if let DocumentState::New(doc_info) = state {
-                assert_ne!(doc_info.filename, "/nonexistent/file.txt");
-            }
-        }
-    }
+}
+
+/// Convert Qdrant Payload back to DocMeta
+fn payload_to_doc_meta(payload: &Payload) -> Result<DocMeta> {
+    let json_map: serde_json::Map<String, Value> = payload
+        .0
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    let json_value = Value::Object(json_map);
+    serde_json::from_value(json_value).map_err(|e| anyhow!(e.to_string()))
+}
+
+/// Convert Qdrant Payload back to LineEmbedding
+fn payload_to_line_embedding(payload: &Payload) -> Result<LineEmbedding> {
+    let json_map: serde_json::Map<String, Value> = payload
+        .0
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    let json_value = Value::Object(json_map);
+    serde_json::from_value(json_value).map_err(|e| anyhow!(e.to_string()))
 }

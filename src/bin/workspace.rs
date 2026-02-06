@@ -50,9 +50,8 @@ async fn main() -> Result<()> {
 
                 if args.json {
                     // Try to get document count from store, or use 0 for new workspace
-                    let total_documents = if let Ok(store) = Store::open(&ws.config.root_dir).await
-                    {
-                        if let Ok(stats) = store.get_stats().await {
+                    let total_documents = if let Ok(store) = Store::open(&ws.config.root_dir) {
+                        if let Ok(stats) = store.get_stats() {
                             stats.total_documents
                         } else {
                             0
@@ -97,8 +96,8 @@ async fn main() -> Result<()> {
                 let ws = Workspace::open()?;
 
                 // Open store and get stats
-                let store = Store::open(&ws.config.root_dir).await?;
-                let stats = store.get_stats().await?;
+                let store = Store::open(&ws.config.root_dir)?;
+                let stats = store.get_stats()?;
 
                 if args.json {
                     let output = WorkspaceOutput {
@@ -139,10 +138,10 @@ async fn main() -> Result<()> {
             {
                 let _name = Workspace::active().context("No active workspace")?;
                 let ws = Workspace::open()?;
-                let store = Store::open(&ws.config.root_dir).await?;
+                let store = Store::open(&ws.config.root_dir)?;
 
                 // Get all document paths from the workspace
-                let all_paths = store.get_all_document_paths().await?;
+                let all_paths = store.get_all_document_paths()?;
                 let total_before = all_paths.len();
 
                 // Check which files no longer exist
@@ -158,7 +157,7 @@ async fn main() -> Result<()> {
 
                 if !missing_paths.is_empty() {
                     // Remove stale documents
-                    store.delete_documents(&missing_paths).await?;
+                    store.delete_documents(&missing_paths)?;
                 }
 
                 if args.json {

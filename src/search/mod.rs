@@ -151,10 +151,10 @@ pub async fn search_with_workspace(
 ) -> Result<Vec<RankedLine>> {
     let query_embedding = model.encode_single(query);
     let ws = Workspace::open()?;
-    let store = Store::open(&ws.config.root_dir).await?;
+    let store = Store::open(&ws.config.root_dir)?;
 
     // Step 1: Analyze document states (changed/new/unchanged)
-    let doc_states = store.analyze_document_states(files).await?;
+    let doc_states = store.analyze_document_states(files)?;
 
     // Step 2: Process documents that need embedding updates
     let mut line_embeddings_to_upsert = Vec::new();
@@ -190,21 +190,18 @@ pub async fn search_with_workspace(
 
     // Step 3: Update workspace with new/changed line embeddings
     if !line_embeddings_to_upsert.is_empty() {
-        store
-            .upsert_line_embeddings(&line_embeddings_to_upsert)
-            .await?;
+        store.upsert_line_embeddings(&line_embeddings_to_upsert)?;
     }
 
     // Also update document metadata for tracking changes
     if !docs_to_upsert.is_empty() {
-        store.upsert_document_metadata(&docs_to_upsert).await?;
+        store.upsert_document_metadata(&docs_to_upsert)?;
     }
 
     // Step 4: Search line embeddings directly from the workspace
     let max_distance = config.max_distance.map(|d| d as f32);
-    let ranked_lines = store
-        .search_line_embeddings(&query_embedding, files, config.top_k, max_distance)
-        .await?;
+    let ranked_lines =
+        store.search_line_embeddings(&query_embedding, files, config.top_k, max_distance)?;
 
     Ok(ranked_lines)
 }
