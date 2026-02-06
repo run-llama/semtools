@@ -67,23 +67,21 @@ pub struct LineEmbedding {
 }
 
 impl DocMeta {
-    pub fn id(&self) -> i32 {
+    pub fn id(&self) -> u64 {
         // Generate deterministic ID based on path hash for consistent upserts
         let mut hasher = DefaultHasher::new();
         self.path.hash(&mut hasher);
-        // Use absolute value to ensure positive ID, avoid i32::MIN edge case
-        (hasher.finish() as i32).abs().max(1)
+        hasher.finish()
     }
 }
 
 impl LineEmbedding {
-    pub fn id(&self) -> i32 {
+    pub fn id(&self) -> u64 {
         // Generate deterministic ID based on path + line number for consistent upserts
         let mut hasher = DefaultHasher::new();
         self.path.hash(&mut hasher);
         self.line_number.hash(&mut hasher);
-        // Use absolute value to ensure positive ID, avoid i32::MIN edge case
-        (hasher.finish() as i32).abs().max(1)
+        hasher.finish()
     }
 }
 
@@ -389,16 +387,13 @@ impl Store {
             return Ok(());
         }
 
-        let mut point_id = self.count_documents()? as u64;
-
         for chunk in metas.chunks(1000) {
             let mut points: Vec<PointStructPersisted> = vec![];
             for meta in chunk {
-                point_id += 1_u64;
                 let payload_json =
                     serde_json::to_value(meta).map_err(|e| anyhow!(e.to_string()))?;
                 let vector: Vec<f32> = vec![];
-                let point = make_point(point_id, vector, payload_json, DOCUMENTS_VECTOR_NAME);
+                let point = make_point(meta.id(), vector, payload_json, DOCUMENTS_VECTOR_NAME);
                 points.push(point);
             }
             let operation = CollectionUpdateOperations::PointOperation(
@@ -420,17 +415,15 @@ impl Store {
         if line_embeddings.is_empty() {
             return Ok(());
         }
-        let mut point_id = self.count_line_embeddings()? as u64;
 
         for chunk in line_embeddings.chunks(1000) {
             let mut points: Vec<PointStructPersisted> = vec![];
 
             for line_embedding in chunk {
-                point_id += 1_u64;
                 let payload_json =
                     serde_json::to_value(line_embedding).map_err(|e| anyhow!(e.to_string()))?;
                 let point = make_point(
-                    point_id,
+                    line_embedding.id(),
                     line_embedding.embedding.clone(),
                     payload_json,
                     LINE_EMBEDDINGS_VECTOR_NAME,
@@ -637,19 +630,6 @@ impl Store {
         Ok(count)
     }
 
-    /// Get the number of indexed points in the documents shard
-    pub fn count_line_embeddings(&self) -> Result<usize> {
-        let count = self
-            .line_embeddings_shard
-            .count(CountRequestInternal {
-                filter: None,
-                exact: true,
-            })
-            .map_err(|e| anyhow!(e.to_string()))?;
-
-        Ok(count)
-    }
-
     /// Flush all documents data to disk.
     pub fn flush_documents(&self) {
         self.documents_shard.flush();
@@ -714,3 +694,227 @@ fn payload_to_line_embedding(payload: &Payload) -> Result<LineEmbedding> {
     let json_value = Value::Object(json_map);
     serde_json::from_value(json_value).map_err(|e| anyhow!(e.to_string()))
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use tempfile::TempDir;
+
+//     // Helper function to create a test store
+//     fn create_test_store() -> (Store, TempDir) {
+//         let temp_dir = TempDir::new().expect("Failed to create temp dir");
+//         let store = Store::open(temp_dir.path().to_str().unwrap()).expect("Failed to create store");
+//         (store, temp_dir)
+//     }
+
+//     // Helper function to create test documents
+//     fn create_test_docs() -> (Vec<DocMeta>, Vec<Vec<f32>>) {
+//         let docs = vec![
+//             DocMeta {
+//                 path: "/test/doc1.txt".to_string(),
+//                 size_bytes: 100,
+//                 mtime: 1234567890,
+//                 _version: CURRENT_EMBEDDING_VERSION,
+//             },
+//             DocMeta {
+//                 path: "/test/doc2.txt".to_string(),
+//                 size_bytes: 200,
+//                 mtime: 1234567891,
+//                 _version: CURRENT_EMBEDDING_VERSION,
+//             },
+//             DocMeta {
+//                 path: "/test/doc3.txt".to_string(),
+//                 size_bytes: 150,
+//                 mtime: 1234567892,
+//                 _version: CURRENT_EMBEDDING_VERSION,
+//             },
+//         ];
+
+//         let embeddings = vec![
+//             vec![0.1, 0.2, 0.3, 0.4],
+//             vec![0.5, 0.6, 0.7, 0.8],
+//             vec![0.9, 1.0, 1.1, 1.2],
+//         ];
+
+//         (docs, embeddings)
+//     }
+
+//     #[test]
+//     fn test_store_creation_and_stats_empty() {
+//         let (store, _temp_dir) = create_test_store();
+
+//         let stats = store.get_stats().expect("Failed to get stats");
+
+//         assert_eq!(stats.total_documents, 0);
+//         assert!(stats.has_index);
+//         assert_eq!(stats.index_type, Some("HNSW".to_string()));
+//     }
+
+//     #[test]
+//     fn test_upsert_documents_and_stats() {
+//         let (store, _temp_dir) = create_test_store();
+//         let (docs, embeddings) = create_test_docs();
+
+//         // Insert documents
+//         store
+//             .upsert_document_metadata(&docs)
+//             .expect("Failed to upsert documents");
+
+//         let line_embeddings: Vec<LineEmbedding> = docs
+//             .iter()
+//             .enumerate()
+//             .map(|(i, doc)| LineEmbedding {
+//                 path: doc.path.clone(),
+//                 line_number: i as i32,
+//                 embedding: embeddings[i].clone(),
+//             })
+//             .collect();
+
+//         store
+//             .upsert_line_embeddings(&line_embeddings)
+//             .expect("Failed to upsert line embeddings");
+
+//         // Check stats
+//         let stats = store.get_stats().expect("Failed to get stats");
+
+//         assert_eq!(stats.total_documents, 3);
+//         assert!(stats.has_index);
+//         assert_eq!(stats.index_type, Some("HNSW".to_string()));
+//     }
+
+//     #[test]
+//     fn test_get_all_document_paths() {
+//         let (store, _temp_dir) = create_test_store();
+//         let (docs, _embeddings) = create_test_docs();
+
+//         // Initially should be empty
+//         let paths = store
+//             .get_all_document_paths()
+//             .expect("Failed to get document paths");
+//         assert!(paths.is_empty());
+
+//         // Insert documents
+//         store
+//             .upsert_document_metadata(&docs)
+//             .expect("Failed to upsert documents");
+
+//         // Should now have paths
+//         let paths = store
+//             .get_all_document_paths()
+//             .expect("Failed to get document paths");
+
+//         assert_eq!(paths.len(), 3);
+//         assert!(paths.contains(&"/test/doc1.txt".to_string()));
+//         assert!(paths.contains(&"/test/doc2.txt".to_string()));
+//         assert!(paths.contains(&"/test/doc3.txt".to_string()));
+//     }
+
+//     #[test]
+//     fn test_get_existing_docs() {
+//         let (store, _temp_dir) = create_test_store();
+//         let (docs, _embeddings) = create_test_docs();
+
+//         // Insert documents
+//         store
+//             .upsert_document_metadata(&docs)
+//             .expect("Failed to upsert documents");
+
+//         // Test getting existing docs
+//         let query_paths = vec![
+//             "/test/doc1.txt".to_string(),
+//             "/test/doc2.txt".to_string(),
+//             "/test/nonexistent.txt".to_string(),
+//         ];
+
+//         let existing = store
+//             .get_existing_docs(&query_paths)
+//             .expect("Failed to get existing docs");
+
+//         assert_eq!(existing.len(), 2);
+//         assert!(existing.contains_key("/test/doc1.txt"));
+//         assert!(existing.contains_key("/test/doc2.txt"));
+//         assert!(!existing.contains_key("/test/nonexistent.txt"));
+
+//         // Verify metadata
+//         let doc1_meta = existing.get("/test/doc1.txt").unwrap();
+//         assert_eq!(doc1_meta.size_bytes, 100);
+//         assert_eq!(doc1_meta.mtime, 1234567890);
+//     }
+
+//     #[test]
+//     fn test_delete_documents() {
+//         let (store, _temp_dir) = create_test_store();
+//         let (docs, _embeddings) = create_test_docs();
+
+//         // Insert documents
+//         store
+//             .upsert_document_metadata(&docs)
+//             .expect("Failed to upsert documents");
+
+//         // Verify all documents exist
+//         let all_paths = store
+//             .get_all_document_paths()
+//             .expect("Failed to get document paths");
+//         assert_eq!(all_paths.len(), 3);
+
+//         // Delete some documents
+//         let to_delete = vec!["/test/doc1.txt".to_string(), "/test/doc3.txt".to_string()];
+//         store
+//             .delete_documents(&to_delete)
+//             .expect("Failed to delete documents");
+
+//         // Verify only doc2 remains
+//         let remaining_paths = store
+//             .get_all_document_paths()
+//             .expect("Failed to get document paths");
+//         assert_eq!(remaining_paths.len(), 1);
+//         assert!(remaining_paths.contains(&"/test/doc2.txt".to_string()));
+//     }
+
+//     #[test]
+//     fn test_upsert_replaces_existing() {
+//         let (store, _temp_dir) = create_test_store();
+
+//         // Insert initial document
+//         let initial_doc = DocMeta {
+//             path: "/test/doc.txt".to_string(),
+//             size_bytes: 100,
+//             mtime: 1000,
+//             _version: CURRENT_EMBEDDING_VERSION,
+//         };
+//         let _initial_embedding = [vec![1.0, 2.0, 3.0, 4.0]];
+
+//         store
+//             .upsert_document_metadata(&[initial_doc])
+//             .expect("Failed to insert initial document");
+
+//         // Verify document exists
+//         let paths = store.get_all_document_paths().expect("Failed to get paths");
+//         assert_eq!(paths.len(), 1);
+
+//         // Update the same document
+//         let updated_doc = DocMeta {
+//             path: "/test/doc.txt".to_string(),
+//             size_bytes: 200,
+//             mtime: 2000,
+//             _version: CURRENT_EMBEDDING_VERSION,
+//         };
+//         let _updated_embedding = [vec![5.0, 6.0, 7.0, 8.0]];
+
+//         store
+//             .upsert_document_metadata(&[updated_doc])
+//             .expect("Failed to update document");
+
+//         // Should still have only one document
+//         let paths = store.get_all_document_paths().expect("Failed to get paths");
+//         assert_eq!(paths.len(), 1);
+
+//         // Verify metadata was updated
+//         let existing = store
+//             .get_existing_docs(&["/test/doc.txt".to_string()])
+//             .expect("Failed to get existing docs");
+//         let doc_meta = existing.get("/test/doc.txt").unwrap();
+//         assert_eq!(doc_meta.size_bytes, 200);
+//         assert_eq!(doc_meta.mtime, 2000);
+//     }
+// }
