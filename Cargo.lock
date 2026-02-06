@@ -4077,7 +4077,7 @@ checksum = "b12e76d157a900eb52e81bc6e9f3069344290341720e9178cde2407113ac8d89"
 
 [[package]]
 name = "semtools"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "async-openai",
