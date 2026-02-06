@@ -22,8 +22,6 @@ use shard::query::query_enum::QueryEnum;
 use shard::query::{ScoringQuery, ShardQueryRequest};
 use shard::scroll::ScrollRequestInternal;
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -36,6 +34,9 @@ pub const CURRENT_EMBEDDING_VERSION: u32 = 2;
 
 /// Embedding size (needed to inform Qdrant collection when it is instantiated)
 pub const LINE_EMBEDDING_SIZE: usize = 256;
+/// We are not actually storing document-level embeddings,
+/// but Qdrant requires a vector size to be defined for the collection, so we use a dummy size of 1.
+/// This collection is being used for document-level metadata
 pub const DOCUMENT_EMBEDDING_SIZE: usize = 1;
 
 /// Vector name used in the documents shard
@@ -70,19 +71,16 @@ pub struct LineEmbedding {
 impl DocMeta {
     pub fn id(&self) -> u64 {
         // Generate deterministic ID based on path hash for consistent upserts
-        let mut hasher = DefaultHasher::new();
-        self.path.hash(&mut hasher);
-        hasher.finish()
+        fnv1a_hash(self.path.as_bytes())
     }
 }
 
 impl LineEmbedding {
     pub fn id(&self) -> u64 {
         // Generate deterministic ID based on path + line number for consistent upserts
-        let mut hasher = DefaultHasher::new();
-        self.path.hash(&mut hasher);
-        self.line_number.hash(&mut hasher);
-        hasher.finish()
+        let mut bytes = self.path.as_bytes().to_vec();
+        bytes.extend_from_slice(&self.line_number.to_le_bytes());
+        fnv1a_hash(&bytes)
     }
 }
 
@@ -109,9 +107,9 @@ pub struct Store {
 impl Store {
     /// Initialize or load storage for a workspace directory
     pub fn open(workspace_dir: &str) -> Result<Self> {
-        let document_shard_path = Path::new(workspace_dir).join("documents");
+        let document_shard_path = Path::new(workspace_dir).join("documents.qdrant");
 
-        let line_embeddings_shard_path = Path::new(workspace_dir).join("line_embeddings");
+        let line_embeddings_shard_path = Path::new(workspace_dir).join("line_embeddings.qdrant");
 
         // Create shard directories
         std::fs::create_dir_all(&document_shard_path)?;
@@ -241,7 +239,7 @@ impl Store {
                         )),
                         Condition::Field(FieldCondition::new_match(
                             JsonPath::from_str("_version").map_err(|_| {
-                                anyhow!("An error occurred while creating JSONPath from 'path'")
+                                anyhow!("An error occurred while creating JSONPath from '_version'")
                             })?,
                             Match::new_value(ValueVariants::Integer(
                                 CURRENT_EMBEDDING_VERSION as i64,
@@ -366,7 +364,7 @@ impl Store {
                 .update(operation)
                 .map_err(|e| anyhow!(e.to_string()))?;
 
-            // // flush to disk
+            // flush to disk
             self.flush_documents();
         }
 
@@ -601,6 +599,19 @@ impl Store {
     pub fn flush_line_embeddings(&self) {
         self.line_embeddings_shard.flush();
     }
+}
+
+/// Generate a stable hash for a byte slice using the FNV-1a algorithm.
+fn fnv1a_hash(bytes: &[u8]) -> u64 {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET_BASIS;
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
 }
 
 /// Create a point struct for upserting.
