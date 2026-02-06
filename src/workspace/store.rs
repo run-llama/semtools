@@ -165,7 +165,7 @@ impl Store {
             payload_storage_type: PayloadStorageType::Mmap,
         };
 
-        let document_shard =
+        let documents_shard =
             EdgeShard::load(&document_shard_path, Some(segment_config_document_shard))?;
 
         let mut vector_data_line_embeddings_shard = HashMap::new();
@@ -194,8 +194,8 @@ impl Store {
         )?;
 
         Ok(Self {
-            documents_shard: document_shard,
-            line_embeddings_shard: line_embeddings_shard,
+            documents_shard,
+            line_embeddings_shard,
         })
     }
 
@@ -364,6 +364,9 @@ impl Store {
             .update(operation)
             .map_err(|e| anyhow!(e.to_string()))?;
 
+        // flush changes to disk
+        self.flush_line_embeddings();
+
         Ok(())
     }
 
@@ -393,7 +396,7 @@ impl Store {
             for meta in chunk {
                 point_id += 1_u64;
                 let payload_json =
-                    serde_json::to_value(&meta).map_err(|e| anyhow!(e.to_string()))?;
+                    serde_json::to_value(meta).map_err(|e| anyhow!(e.to_string()))?;
                 let vector: Vec<f32> = vec![];
                 let point = make_point(point_id, vector, payload_json, DOCUMENTS_VECTOR_NAME);
                 points.push(point);
@@ -425,7 +428,7 @@ impl Store {
             for line_embedding in chunk {
                 point_id += 1_u64;
                 let payload_json =
-                    serde_json::to_value(&line_embedding).map_err(|e| anyhow!(e.to_string()))?;
+                    serde_json::to_value(line_embedding).map_err(|e| anyhow!(e.to_string()))?;
                 let point = make_point(
                     point_id,
                     line_embedding.embedding.clone(),
@@ -478,12 +481,9 @@ impl Store {
         let mut paths: Vec<String> = vec![];
 
         for record in records {
-            match record.payload {
-                Some(p) => {
-                    let doc_meta = payload_to_doc_meta(&p)?;
-                    paths.push(doc_meta.path);
-                }
-                None => {}
+            if let Some(p) = record.payload {
+                let doc_meta = payload_to_doc_meta(&p)?;
+                paths.push(doc_meta.path);
             }
         }
 
@@ -508,10 +508,8 @@ impl Store {
         for chunk in subset_paths.chunks(1000) {
             let query: Vec<f32> = query_vec.into();
             let vector: VectorInternal = query.into();
-            let score_threshold: Option<OrderedFloat<f32>> = match max_distance {
-                Some(max_dist) => Some(OrderedFloat(1_f32 - max_dist)),
-                None => None,
-            };
+            let score_threshold: Option<OrderedFloat<f32>> =
+                max_distance.map(|max_dist| OrderedFloat(1_f32 - max_dist));
             let results = self
                 .line_embeddings_shard
                 .query(ShardQueryRequest {
@@ -529,7 +527,7 @@ impl Store {
                             Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
                         ),
                     ))),
-                    score_threshold: score_threshold,
+                    score_threshold,
                     limit: top_k * 2,
                     offset: 0,
                     params: None,
@@ -539,17 +537,14 @@ impl Store {
                 .map_err(|e| anyhow!(e.to_string()))?;
 
             for result in results {
-                match result.payload {
-                    Some(p) => {
-                        let line_embd = payload_to_line_embedding(&p)?;
-                        let ranked_line = RankedLine {
-                            line_number: line_embd.line_number,
-                            path: line_embd.path,
-                            distance: result.score,
-                        };
-                        all_results.push(ranked_line);
-                    }
-                    None => {}
+                if let Some(p) = result.payload {
+                    let line_embd = payload_to_line_embedding(&p)?;
+                    let ranked_line = RankedLine {
+                        line_number: line_embd.line_number,
+                        path: line_embd.path,
+                        distance: result.score,
+                    };
+                    all_results.push(ranked_line);
                 }
             }
         }
