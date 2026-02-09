@@ -111,57 +111,65 @@ impl Store {
 
         let line_embeddings_shard_path = Path::new(workspace_dir).join("line_embeddings.qdrant");
 
+        let segment_config_document_shard: Option<SegmentConfig> = if !document_shard_path.exists()
+        {
+            std::fs::create_dir_all(&document_shard_path)?;
+            // Create segment config for the shard
+            let mut vector_data_document_shard = HashMap::new();
+            vector_data_document_shard.insert(
+                DOCUMENTS_VECTOR_NAME.to_string(),
+                VectorDataConfig {
+                    size: DOCUMENT_EMBEDDING_SIZE,
+                    distance: Distance::Cosine,
+                    storage_type: VectorStorageType::ChunkedMmap,
+                    index: Default::default(),
+                    quantization_config: None,
+                    multivector_config: None,
+                    datatype: None,
+                },
+            );
+
+            Some(SegmentConfig {
+                vector_data: vector_data_document_shard,
+                sparse_vector_data: HashMap::new(),
+                payload_storage_type: PayloadStorageType::Mmap,
+            })
+        } else {
+            None
+        };
+
         // Create shard directories
-        std::fs::create_dir_all(&document_shard_path)?;
-        std::fs::create_dir_all(&line_embeddings_shard_path)?;
+        let segment_config_line_embeddings_shard: Option<SegmentConfig> =
+            if !line_embeddings_shard_path.exists() {
+                std::fs::create_dir_all(&line_embeddings_shard_path)?;
+                let mut vector_data_line_embeddings_shard = HashMap::new();
+                vector_data_line_embeddings_shard.insert(
+                    LINE_EMBEDDINGS_VECTOR_NAME.to_string(),
+                    VectorDataConfig {
+                        size: LINE_EMBEDDING_SIZE,
+                        distance: Distance::Cosine,
+                        storage_type: VectorStorageType::ChunkedMmap,
+                        index: Default::default(),
+                        quantization_config: None,
+                        multivector_config: None,
+                        datatype: None,
+                    },
+                );
 
-        // Create segment config for the shard
-        let mut vector_data_document_shard = HashMap::new();
-        vector_data_document_shard.insert(
-            DOCUMENTS_VECTOR_NAME.to_string(),
-            VectorDataConfig {
-                size: DOCUMENT_EMBEDDING_SIZE,
-                distance: Distance::Cosine,
-                storage_type: VectorStorageType::ChunkedMmap,
-                index: Default::default(),
-                quantization_config: None,
-                multivector_config: None,
-                datatype: None,
-            },
-        );
+                Some(SegmentConfig {
+                    vector_data: vector_data_line_embeddings_shard,
+                    sparse_vector_data: HashMap::new(),
+                    payload_storage_type: PayloadStorageType::Mmap,
+                })
+            } else {
+                None
+            };
 
-        let segment_config_document_shard = SegmentConfig {
-            vector_data: vector_data_document_shard,
-            sparse_vector_data: HashMap::new(),
-            payload_storage_type: PayloadStorageType::Mmap,
-        };
-
-        let documents_shard =
-            EdgeShard::load(&document_shard_path, Some(segment_config_document_shard))?;
-
-        let mut vector_data_line_embeddings_shard = HashMap::new();
-        vector_data_line_embeddings_shard.insert(
-            LINE_EMBEDDINGS_VECTOR_NAME.to_string(),
-            VectorDataConfig {
-                size: LINE_EMBEDDING_SIZE,
-                distance: Distance::Cosine,
-                storage_type: VectorStorageType::ChunkedMmap,
-                index: Default::default(),
-                quantization_config: None,
-                multivector_config: None,
-                datatype: None,
-            },
-        );
-
-        let segment_config_line_embeddings_shard = SegmentConfig {
-            vector_data: vector_data_line_embeddings_shard,
-            sparse_vector_data: HashMap::new(),
-            payload_storage_type: PayloadStorageType::Mmap,
-        };
+        let documents_shard = EdgeShard::load(&document_shard_path, segment_config_document_shard)?;
 
         let line_embeddings_shard = EdgeShard::load(
             &line_embeddings_shard_path,
-            Some(segment_config_line_embeddings_shard),
+            segment_config_line_embeddings_shard,
         )?;
 
         Ok(Self {
