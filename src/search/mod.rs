@@ -190,11 +190,19 @@ pub async fn search_with_workspace(
 
     // Step 3: Update workspace with new/changed line embeddings
     if !line_embeddings_to_upsert.is_empty() {
+        eprintln!(
+            "Updating workspace with {} lines from new/changed docs...",
+            line_embeddings_to_upsert.len()
+        );
         store.upsert_line_embeddings(&line_embeddings_to_upsert)?;
     }
 
     // Also update document metadata for tracking changes
     if !docs_to_upsert.is_empty() {
+        eprintln!(
+            "Updating workspace with {} new/changed documents...",
+            docs_to_upsert.len()
+        );
         store.upsert_document_metadata(&docs_to_upsert)?;
     }
 

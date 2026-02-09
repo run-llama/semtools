@@ -45,6 +45,9 @@ const DOCUMENTS_VECTOR_NAME: &str = "documents";
 /// Vector name used in the line embeddings shard
 const LINE_EMBEDDINGS_VECTOR_NAME: &str = "line_embeddings";
 
+/// Default limit for Qdrant retrieval
+const DEFAULT_RETRIEVAL_LIMIT: usize = 10000;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocMeta {
     pub path: String,
@@ -180,6 +183,11 @@ impl Store {
 
     pub fn get_existing_docs(&self, paths: &[String]) -> Result<HashMap<String, DocMeta>> {
         let mut existing = HashMap::new();
+        let docs_count = self.count_documents();
+        let retrieval_limit = match docs_count {
+            Ok(count) => count,
+            Err(_) => DEFAULT_RETRIEVAL_LIMIT,
+        };
 
         for chunk in paths.chunks(1000) {
             let scroll_result = self.documents_shard.scroll(ScrollRequestInternal {
@@ -198,7 +206,7 @@ impl Store {
                     should: None,
                     min_should: None,
                 }),
-                limit: None,
+                limit: Some(retrieval_limit),
             });
             let records = match scroll_result {
                 Ok(r) => {
@@ -229,6 +237,11 @@ impl Store {
         }
 
         let mut point_ids: Vec<ExtendedPointId> = vec![];
+        let docs_count = self.count_documents();
+        let retrieval_limit = match docs_count {
+            Ok(count) => count,
+            Err(_) => DEFAULT_RETRIEVAL_LIMIT,
+        };
 
         // collect all point IDs to be deleted
         for chunk in paths.chunks(1000) {
@@ -258,7 +271,7 @@ impl Store {
                     should: None,
                     min_should: None,
                 }),
-                limit: None,
+                limit: Some(retrieval_limit),
             });
             let records = match scroll_result {
                 Ok(r) => {
@@ -293,6 +306,11 @@ impl Store {
         }
 
         let mut point_ids: Vec<ExtendedPointId> = vec![];
+        let line_embds_count = self.count_line_embeddings();
+        let retrieval_limit = match line_embds_count {
+            Ok(count) => count,
+            Err(_) => DEFAULT_RETRIEVAL_LIMIT,
+        };
 
         // collect all point IDs to be deleted
         for chunk in paths.chunks(1000) {
@@ -309,7 +327,7 @@ impl Store {
                         Match::from(AnyVariants::Strings(chunk.iter().cloned().collect())),
                     ),
                 ))),
-                limit: None,
+                limit: Some(retrieval_limit),
             });
             let records = match scroll_result {
                 Ok(r) => {
@@ -427,6 +445,12 @@ impl Store {
 
     /// Get paths for all stored documents
     pub fn get_all_document_paths(&self) -> Result<Vec<String>> {
+        let docs_count = self.count_documents();
+        let retrieval_limit = match docs_count {
+            Ok(count) => count,
+            Err(_) => DEFAULT_RETRIEVAL_LIMIT,
+        };
+
         let scroll_result = self
             .documents_shard
             .scroll(ScrollRequestInternal {
@@ -435,7 +459,7 @@ impl Store {
                 with_vector: WithVector::Bool(false),
                 with_payload: Some(WithPayloadInterface::Bool(true)),
                 filter: None,
-                limit: None,
+                limit: Some(retrieval_limit),
             })
             .map_err(|e| anyhow!(e.to_string()))?;
 
@@ -589,6 +613,19 @@ impl Store {
     pub fn count_documents(&self) -> Result<usize> {
         let count = self
             .documents_shard
+            .count(CountRequestInternal {
+                filter: None,
+                exact: true,
+            })
+            .map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(count)
+    }
+
+    /// Get the number of indexed points in the documents shard
+    pub fn count_line_embeddings(&self) -> Result<usize> {
+        let count = self
+            .line_embeddings_shard
             .count(CountRequestInternal {
                 filter: None,
                 exact: true,
