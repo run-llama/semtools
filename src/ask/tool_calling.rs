@@ -117,6 +117,11 @@ pub async fn call_tool(
             println!("  start_line: {}", start_line);
             println!("  end_line: {}", end_line);
 
+            // Update files_searched in cur_output
+            if !cur_output.files_searched.contains(&path.to_string()) {
+                cur_output.files_searched.push(path.to_string());
+            }
+
             ReadTool::read(path, start_line, end_line).await
         }
         _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),

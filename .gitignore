@@ -1,2 +1,6 @@
 target
 .idea
+legacy_store
+.venv/
+arxiv_dataset_1000_papers/
+*.log
