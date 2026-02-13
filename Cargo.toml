@@ -11,24 +11,9 @@ keywords = ["semantic-search", "document-parsing", "cli", "pdf", "search"]
 readme = "README.md"
 
 [[bin]]
-name = "parse"
-path = "src/bin/parse.rs"
-required-features = ["parse"]
-
-[[bin]]
-name = "search"
-path = "src/bin/search.rs"
-required-features = ["search"]
-
-[[bin]]
-name = "workspace"
-path = "src/bin/workspace.rs"
-required-features = ["workspace", "search"]
-
-[[bin]]
-name = "ask"
-path = "src/bin/ask.rs"
-required-features = ["ask", "search"]
+name = "semtools"
+path = "src/bin/semtools.rs"
+required-features = ["ask", "search", "workspace", "parse"]
 
 [dependencies]
 # Common dependencies

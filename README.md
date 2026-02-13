@@ -2,12 +2,12 @@
 
 > Semantic search and document parsing tools for the command line
 
-A collection of high-performance CLI tools for document processing and semantic search, built with Rust for speed and reliability.
+A high-performance CLI tool for document processing and semantic search, built with Rust for speed and reliability.
 
-- **`parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
-- **`search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
-- **`ask`** - AI agent with search and read tools for answering questions over document collections (defaults to OpenAI, but see the [config section](#configuration) to learn more about connecting to any OpenAI-Compatible API)
-- **`workspace`** - Workspace management for accelerating search over large collections
+- **`semtools parse`** - Parse documents (PDF, DOCX, etc.) using, by default, the LlamaParse API into markdown format
+- **`semtools search`** - Local semantic keyword search using multilingual embeddings with cosine similarity matching and per-line context matching
+- **`semtools ask`** - AI agent with search and read tools for answering questions over document collections (defaults to OpenAI, but see the [config section](#configuration) to learn more about connecting to any OpenAI-Compatible API)
+- **`semtools workspace`** - Workspace management for accelerating search over large collections
 
 **NOTE:** By default, `parse` uses LlamaParse as a backend. Get your API key today for free at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai). `search` and `workspace` remain local-only. `ask` requires an OpenAI API key.
 
@@ -25,7 +25,8 @@ A collection of high-performance CLI tools for document processing and semantic 
 
 Prerequisites:
 
-- For the `parse` tool: LlamaIndex Cloud API key
+- For the `parse` subcommand: LlamaIndex Cloud API key
+- For the `ask` subcommand: OpenAI API key
 
 Install:
 
@@ -53,41 +54,41 @@ Basic Usage:
 
 ```bash
 # Parse some files
-parse my_dir/*.pdf
+semtools parse my_dir/*.pdf
 
 # Search some (text-based) files
-search "some keywords" *.txt --max-distance 0.3 --n-lines 5
+semtools search "some keywords" *.txt --max-distance 0.3 --n-lines 5
 
 # Ask questions about your documents using an AI agent
-ask "What are the main findings?" papers/*.txt
+semtools ask "What are the main findings?" papers/*.txt
 
 # Combine parsing and search
-parse my_docs/*.pdf | xargs search "API endpoints"
+semtools parse my_docs/*.pdf | xargs search "API endpoints"
 
 # Ask a question to a set of files
-ask "Some question?" *.txt 
+semtools ask "Some question?" *.txt 
 
 # Combine parsing with the ask agent
-parse research_papers/*.pdf | xargs ask "Summarize the key methodologies"
+semtools parse research_papers/*.pdf | xargs ask "Summarize the key methodologies"
 
 # Ask based on stdin content
-cat README.md | ask "How do I install SemTools?"
+cat README.md | semtools ask "How do I install SemTools?"
 ```
 
 Advanced Usage:
 
 ```bash
 # Combine with grep for exact-match pre-filtering and distance thresholding
-parse *.pdf | xargs cat | grep -i "error" | search "network error" --max-distance 0.3
+semtools parse *.pdf | xargs cat | grep -i "error" | semtools search "network error" --max-distance 0.3
 
 # Pipeline with content search (note the 'xargs' on search to search files instead of stdin)
-find . -name "*.md" | xargs parse | xargs search "installation"
+find . -name "*.md" | xargs semtools parse | xargs semtools search "installation"
 
 # Combine with grep for filtering (grep could be before or after parse/search!)
-parse docs/*.pdf | xargs search "API" | grep -A5 "authentication"
+semtools parse docs/*.pdf | xargs semtools search "API" | grep -A5 "authentication"
 
 # Save search results from stdin search
-parse report.pdf | xargs cat | search "summary" > results.txt
+semtools parse report.pdf | xargs cat | semtools search "summary" > results.txt
 ```
 
 Using Workspaces:
@@ -95,7 +96,7 @@ Using Workspaces:
 ```bash
 # Create or select a workspace
 # Workspaces are stored in ~/.semtools/workspaces/
-workspace use my-workspace
+semtools workspace use my-workspace
 > Workspace 'my-workspace' configured.
 > To activate it, run:
 >   export SEMTOOLS_WORKSPACE=my-workspace
@@ -107,17 +108,17 @@ export SEMTOOLS_WORKSPACE=my-workspace
 
 # All search commands will now use the workspace for caching embeddings
 # The initial command is used to initialize the workspace
-search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
+semtools search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
 
 # If documents change, they are automatically re-embedded and cached
 echo "some new content" > ./some_large_dir/some_file.txt
-search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
+semtools search "some keywords" ./some_large_dir/*.txt --n-lines 5 --top-k 10
 
 # If documents are removed, you can run prune to clean up stale files
-workspace prune
+semtools workspace prune
 
 # You can see the stats of a workspace at any time
-workspace status
+semtools workspace status
 > Active workspace: arxiv
 > Root: /Users/loganmarkewich/.semtools/workspaces/arxiv
 > Documents: 3000
@@ -127,10 +128,10 @@ workspace status
 ## CLI Help
 
 ```bash
-$ parse --help
+$ semtools parse --help
 A CLI tool for parsing documents using various backends
 
-Usage: parse [OPTIONS] <FILES>...
+Usage: semtools parse [OPTIONS] <FILES>...
 
 Arguments:
   <FILES>...  Files to parse
@@ -140,33 +141,32 @@ Options:
   -b, --backend <BACKEND>  The backend type to use for parsing. Defaults to `llama-parse` [default: llama-parse]
   -v, --verbose            Verbose output while parsing
   -h, --help               Print help
-  -V, --version            Print version
 ```
 
 ```bash
-$ search --help
+$ semtools search --help
 A CLI tool for fast semantic keyword search
 
-Usage: search [OPTIONS] <QUERY> [FILES]...
+Usage: semtools search [OPTIONS] <QUERY> [FILES]...
 
 Arguments:
   <QUERY>     Query to search for (positional argument)
-  [FILES]...  Files or directories to search
+  [FILES]...  Files to search, optional if using stdin
 
 Options:
   -n, --n-lines <N_LINES>            How many lines before/after to return as context [default: 3]
       --top-k <TOP_K>                The top-k files or texts to return (ignored if max_distance is set) [default: 3]
   -m, --max-distance <MAX_DISTANCE>  Return all results with distance below this threshold (0.0+)
   -i, --ignore-case                  Perform case-insensitive search (default is false)
+  -j, --json                         Output results in JSON format
   -h, --help                         Print help
-  -V, --version                      Print version
 ```
 
 ```bash
-$ workspace --help
+$ semtools workspace --help
 Manage semtools workspaces
 
-Usage: workspace <COMMAND>
+Usage: semtools workspace [OPTIONS] <COMMAND>
 
 Commands:
   use     Use or create a workspace (prints export command to run)
@@ -175,15 +175,15 @@ Commands:
   help    Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -j, --json  Output results in JSON format
+  -h, --help  Print help
 ```
 
 ```bash
-$ ask --help
-A CLI tool for fast semantic keyword search
+$ semtools ask --help
+A CLI tool for document-based question-answering
 
-Usage: ask [OPTIONS] <QUERY> [FILES]...
+Usage: semtools ask [OPTIONS] <QUERY> [FILES]...
 
 Arguments:
   <QUERY>     Query to prompt the agent with
@@ -194,8 +194,9 @@ Options:
       --api-key <API_KEY>    OpenAI API key (overrides config file and env var)
       --base-url <BASE_URL>  OpenAI base URL (overrides config file)
   -m, --model <MODEL>        Model to use for the agent (overrides config file)
+      --api-mode <API_MODE>  API mode to use: 'chat' or 'responses' (overrides config file)
+  -j, --json                 Output results in JSON or text format
   -h, --help                 Print help
-  -V, --version              Print version
 ```
 
 ## Configuration
@@ -260,11 +261,11 @@ Configuration values are resolved in the following priority order (highest to lo
 
 This allows you to set common defaults in the config file while overriding them on a per-command basis when needed.
 
-### Tool-Specific Configuration
+### Subcommand-Specific Configuration
 
-#### Parse Tool
+#### Parse Subcommand
 
-The `parse` tool requires a LlamaParse API key. Get your free API key at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai).
+The `parse` subcommand requires a LlamaParse API key. Get your free API key at [https://cloud.llamaindex.ai](https://cloud.llamaindex.ai).
 
 Configuration options:
 - `api_key`: Your LlamaParse API key
@@ -273,9 +274,9 @@ Configuration options:
 - `parse_kwargs`: Additional parsing parameters
 - `check_interval`, `max_timeout`, `max_retries`, `retry_delay_ms`, `backoff_multiplier`: Retry and timeout settings
 
-#### Ask Tool
+#### Ask Subcommand
 
-The `ask` tool requires an OpenAI API key for the agent's LLM.
+The `ask` subcommand requires an OpenAI API key for the agent's LLM.
 
 Configuration options:
 - `api_key`: Your OpenAI API key
@@ -285,7 +286,7 @@ Configuration options:
 
 You can also override these per-command:
 ```bash
-ask "What is this about?" docs/*.txt --model gpt-4o --api-key sk-...
+semtools ask "What is this about?" docs/*.txt --model gpt-4o --api-key sk-...
 ```
 
 ## Agent Use Case Examples

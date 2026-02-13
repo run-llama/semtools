@@ -42,10 +42,10 @@ In this example, I have a folder of 900+ papers (as PDFs) from an AI conference.
 First, I parse the PDFs (which caches them to disk at `~/.parse`):
 
 ```bash
-parse ./papers
+semtools parse ./papers
 ```
 
-Next, I invoke `claude` and ask it to summarize its takes on aspects of the papers. Using `parse`, `search`, and other common CLI commands, Claude is able to gather specific information from all of the papers.
+Next, I invoke `claude` and ask it to summarize its takes on aspects of the papers. Using `semtools parse`, `semtools search`, and other common CLI commands, Claude is able to gather specific information from all of the papers.
 
 Below is the full trace from Claude-Code, which demonstrates it's ability to use `semtools` like `parse` and `search` to gather information from your files.
 
@@ -82,7 +82,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 ⏺ I can see there are 910 ACL 2023 papers in PDF format. Now I'll parse all these PDFs to make them searchable, then look for papers
   discussing LLMs and evaluations.
 
-⏺ Bash(parse *.pdf)
+⏺ Bash(semtools parse *.pdf)
   ⎿  /Users/loganmarkewich/.parse/2023.acl-long.0.pdf.md 
      /Users/loganmarkewich/.parse/2023.acl-long.1.pdf.md
      /Users/loganmarkewich/.parse/2023.acl-long.10.pdf.md
@@ -96,7 +96,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 
 ⏺ Great! Now I have parsed all the PDFs. Let me search for papers related to LLMs and evaluations using the search tool.
 
-⏺ Bash(parse *.pdf | xargs cat | search "large language model, evaluation, assessment, benchmark" --n-lines 5 --max-distance 0.4)
+⏺ Bash(semtools parse *.pdf | xargs cat | semtools search "large language model, evaluation, assessment, benchmark" --n-lines 5 --max-distance 0.4)
   ⎿  <stdin>:447094::447105 (0.16900031210055844)
      447095: for Computational Linguistics.
      447096:
@@ -104,7 +104,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 
 ⏺ Now let me search for more specific terms to get a broader view of LLM evaluation research:
 
-⏺ Bash(parse *.pdf | xargs cat | search "GPT, BERT, language model evaluation, performance evaluation, model comparison" --n-lines 5
+⏺ Bash(semtools parse *.pdf | xargs cat | semtools search "GPT, BERT, language model evaluation, performance evaluation, model comparison" --n-lines 5
       --max-distance 0.35)
   ⎿  <stdin>:244769::244780 (0.2719643874147169)                                                             
      244770: <td>
@@ -113,7 +113,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 
 ⏺ Now let me search for specific types of evaluation studies and findings:
 
-⏺ Bash(parse *.pdf | xargs cat | search "robustness, bias, fairness, hallucination, reliability" --n-lines 4 --max-distance 0.3)
+⏺ Bash(semtools parse *.pdf | xargs cat | semtools search "robustness, bias, fairness, hallucination, reliability" --n-lines 4 --max-distance 0.3)
   ⎿  Using cached result for: 2023.acl-long.0.pdf 
      Using cached result for: 2023.acl-long.1.pdf
      Using cached result for: 2023.acl-long.10.pdf
@@ -129,7 +129,7 @@ Below is the full trace from Claude-Code, which demonstrates it's ability to use
 
 ⏺ Let me search for paper titles and abstracts to get a better understanding of the specific papers discussing LLM evaluation:
 
-⏺ Bash(parse *.pdf | xargs cat | search "Abstract" --n-lines 10 | grep -A 10 -B 2 -i "large language model\|evaluation\|benchmark\|GPT\|BERT")
+⏺ Bash(semtools parse *.pdf | xargs cat | semtools search "Abstract" --n-lines 10 | grep -A 10 -B 2 -i "large language model\|evaluation\|benchmark\|GPT\|BERT")
   ⎿  <stdin>:94456::94477 (0.00000000009809730805202874)                    
      94457:   Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought
      94458:                 Reasoning by Large Language Models
@@ -203,5 +203,5 @@ This run cost $0.68 and took about 4 minutes. Not bad for researching across 900
 ## Tips
 
 - Your `CLAUDE.md` / `AGENTS.md` / etc. is critical to ensure your agent knows about `semtools`. Giving it good examples of usage (maybe from this guide) is a good idea.
-- Parsing files can take a while. I recommend using `parse` ahead of time if you intend to give your agent a lot of files to work with that need to be parsed. Results will be cached to disk at `~/.parse`.
+- Parsing files can take a while. I recommend using `semtools parse` ahead of time if you intend to give your agent a lot of files to work with that need to be parsed. Results will be cached to disk at `~/.parse`.
 - Giving your agent any context on the files it has access to will also help it understand how to help you with them.
