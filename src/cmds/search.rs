@@ -1,49 +1,17 @@
 use anyhow::Result;
-use clap::Parser;
 use model2vec_rs::model::StaticModel;
 use std::io::{self, BufRead, IsTerminal};
 
 #[cfg(feature = "workspace")]
-use semtools::workspace::{Workspace, store::RankedLine};
+use crate::workspace::{Workspace, store::RankedLine};
 
 #[cfg(feature = "workspace")]
-use semtools::search::search_with_workspace;
+use crate::search::search_with_workspace;
 
-use semtools::json_mode::{ErrorOutput, SearchOutput, SearchResultJSON};
-use semtools::search::{
+use crate::json_mode::{ErrorOutput, SearchOutput, SearchResultJSON};
+use crate::search::{
     Document, MODEL_NAME, SearchConfig, SearchResult, search_documents, search_files,
 };
-
-#[derive(Parser, Debug)]
-#[command(version, about = "A CLI tool for fast semantic keyword search", long_about = None)]
-struct Args {
-    /// Query to search for (positional argument)
-    query: String,
-
-    /// Files to search (positional arguments, optional if using stdin)
-    #[arg(help = "Files to search, optional if using stdin")]
-    files: Vec<String>,
-
-    /// How many lines before/after to return as context
-    #[arg(short = 'n', long = "n-lines", alias = "context", default_value_t = 3)]
-    n_lines: usize,
-
-    /// The top-k files or texts to return (ignored if max_distance is set)
-    #[arg(long, default_value_t = 3)]
-    top_k: usize,
-
-    /// Return all results with distance below this threshold (0.0+)
-    #[arg(short = 'm', long = "max-distance", alias = "threshold")]
-    max_distance: Option<f64>,
-
-    /// Perform case-insensitive search (default is false)
-    #[arg(short, long, default_value_t = false)]
-    ignore_case: bool,
-
-    /// Output results in JSON format
-    #[clap(short, long)]
-    json: bool,
-}
 
 fn read_from_stdin() -> Result<Vec<String>> {
     let stdin = io::stdin();
@@ -141,10 +109,15 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-
+pub async fn search_cmd(
+    query: String,
+    files: Vec<String>,
+    n_lines: usize,
+    top_k: usize,
+    max_distance: Option<f64>,
+    ignore_case: bool,
+    json: bool,
+) -> Result<()> {
     let model = StaticModel::from_pretrained(
         MODEL_NAME, // "minishlab/potion-multilingual-128M",
         None,       // Optional: Hugging Face API token for private models
@@ -152,25 +125,25 @@ async fn main() -> Result<()> {
         None, // Optional: subfolder if model files are not at the root of the repo/path
     )?;
 
-    let query = if args.ignore_case {
-        args.query.to_lowercase()
+    let query = if ignore_case {
+        query.to_lowercase()
     } else {
-        args.query.clone()
+        query.clone()
     };
 
     let query_embedding = model.encode_single(&query);
     let config = SearchConfig {
-        n_lines: args.n_lines,
-        top_k: args.top_k,
-        max_distance: args.max_distance,
-        ignore_case: args.ignore_case,
+        n_lines,
+        top_k,
+        max_distance,
+        ignore_case,
     };
 
     // Handle stdin input (non-workspace mode)
-    if args.files.is_empty() && !io::stdin().is_terminal() {
+    if files.is_empty() && !io::stdin().is_terminal() {
         let stdin_lines = read_from_stdin()?;
         if !stdin_lines.is_empty() {
-            let lines_for_embedding = if args.ignore_case {
+            let lines_for_embedding = if ignore_case {
                 stdin_lines.iter().map(|s| s.to_lowercase()).collect()
             } else {
                 stdin_lines.clone()
@@ -186,7 +159,7 @@ async fn main() -> Result<()> {
 
             let search_results = search_documents(&documents, &query_embedding, &config);
 
-            if args.json {
+            if json {
                 let output = SearchOutput {
                     results: search_results.iter().map(search_result_to_json).collect(),
                 };
@@ -200,10 +173,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    if args.files.is_empty() {
+    if files.is_empty() {
         let error_msg =
             "No input provided. Either specify files as arguments or pipe input to stdin.";
-        if args.json {
+        if json {
             let error_output = ErrorOutput {
                 error: error_msg.to_string(),
                 error_type: "NoInput".to_string(),
@@ -222,21 +195,21 @@ async fn main() -> Result<()> {
         if Workspace::active().is_ok() {
             // Workspace mode: use persisted line embeddings for speed
             let config = SearchConfig {
-                n_lines: args.n_lines,
-                top_k: args.top_k,
-                max_distance: args.max_distance,
-                ignore_case: args.ignore_case,
+                n_lines,
+                top_k,
+                max_distance,
+                ignore_case,
             };
-            let ranked_lines = search_with_workspace(&args.files, &query, &model, &config).await?;
+            let ranked_lines = search_with_workspace(&files, &query, &model, &config).await?;
 
-            if args.json {
+            if json {
                 // Convert workspace results to SearchResultJSON
                 let results: Vec<SearchResultJSON> = ranked_lines
                     .iter()
                     .map(|ranked_line| {
                         let match_line_number = ranked_line.line_number as usize;
-                        let start = match_line_number.saturating_sub(args.n_lines);
-                        let end = match_line_number + args.n_lines + 1;
+                        let start = match_line_number.saturating_sub(n_lines);
+                        let end = match_line_number + n_lines + 1;
 
                         // Read file content for the result
                         let content =
@@ -264,12 +237,12 @@ async fn main() -> Result<()> {
                 let json_output = serde_json::to_string_pretty(&output)?;
                 println!("{}", json_output);
             } else {
-                print_workspace_search_results(&ranked_lines, args.n_lines);
+                print_workspace_search_results(&ranked_lines, n_lines);
             }
         } else {
-            let search_results = search_files(&args.files, &query, &model, &config)?;
+            let search_results = search_files(&files, &query, &model, &config)?;
 
-            if args.json {
+            if json {
                 let output = SearchOutput {
                     results: search_results.iter().map(search_result_to_json).collect(),
                 };
@@ -283,9 +256,9 @@ async fn main() -> Result<()> {
 
     #[cfg(not(feature = "workspace"))]
     {
-        let search_results = search_files(&args.files, &query, &model, &config)?;
+        let search_results = search_files(&files, &query, &model, &config)?;
 
-        if args.json {
+        if json {
             let output = SearchOutput {
                 results: search_results.iter().map(search_result_to_json).collect(),
             };
