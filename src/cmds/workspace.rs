@@ -46,6 +46,8 @@ pub async fn workspace_use_cmd(name: String, json: bool) -> Result<()> {
             println!("  export SEMTOOLS_WORKSPACE={name}");
             println!();
             println!("Or add this to your shell profile (.bashrc, .zshrc, etc.)");
+            println!();
+            println!("Or use the `--workspace` option on the commands that support it");
         }
     }
     #[cfg(not(feature = "workspace"))]
@@ -64,11 +66,11 @@ pub async fn workspace_use_cmd(name: String, json: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn workspace_status_cmd(json: bool) -> Result<()> {
+pub async fn workspace_status_cmd(json: bool, workspace_name: Option<&str>) -> Result<()> {
     #[cfg(feature = "workspace")]
     {
-        let _name = Workspace::active().context("No active workspace")?;
-        let ws = Workspace::open()?;
+        let _name = Workspace::active(workspace_name).context("No active workspace")?;
+        let ws = Workspace::open(workspace_name)?;
 
         // Open store and get stats
         let store = Store::open(&ws.config.root_dir)?;
@@ -110,11 +112,11 @@ pub async fn workspace_status_cmd(json: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn workspace_prune_cmd(json: bool) -> Result<()> {
+pub async fn workspace_prune_cmd(json: bool, workspace_name: Option<&str>) -> Result<()> {
     #[cfg(feature = "workspace")]
     {
-        let _name = Workspace::active().context("No active workspace")?;
-        let ws = Workspace::open()?;
+        let _name = Workspace::active(workspace_name).context("No active workspace")?;
+        let ws = Workspace::open(workspace_name)?;
         let store = Store::open(&ws.config.root_dir)?;
 
         // Get all document paths from the workspace

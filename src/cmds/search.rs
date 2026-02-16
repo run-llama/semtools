@@ -109,6 +109,7 @@ fn print_workspace_search_results(ranked_lines: &[RankedLine], n_lines: usize) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search_cmd(
     query: String,
     files: Vec<String>,
@@ -117,6 +118,7 @@ pub async fn search_cmd(
     max_distance: Option<f64>,
     ignore_case: bool,
     json: bool,
+    workspace_name: Option<&str>,
 ) -> Result<()> {
     let model = StaticModel::from_pretrained(
         MODEL_NAME, // "minishlab/potion-multilingual-128M",
@@ -192,7 +194,7 @@ pub async fn search_cmd(
     // Handle file input with optional workspace integration
     #[cfg(feature = "workspace")]
     {
-        if Workspace::active().is_ok() {
+        if Workspace::active(workspace_name).is_ok() {
             // Workspace mode: use persisted line embeddings for speed
             let config = SearchConfig {
                 n_lines,
@@ -200,7 +202,8 @@ pub async fn search_cmd(
                 max_distance,
                 ignore_case,
             };
-            let ranked_lines = search_with_workspace(&files, &query, &model, &config).await?;
+            let ranked_lines =
+                search_with_workspace(&files, &query, &model, &config, workspace_name).await?;
 
             if json {
                 // Convert workspace results to SearchResultJSON
