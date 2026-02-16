@@ -30,8 +30,8 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn open() -> Result<Self> {
-        let active_workspace = Self::active()?;
+    pub fn open(workspace_name: Option<&str>) -> Result<Self> {
+        let active_workspace = Self::active(workspace_name)?;
         let cfg_path = Self::config_path_for(&active_workspace)?;
         let cfg = std::fs::read_to_string(&cfg_path)
             .ok()
@@ -55,16 +55,22 @@ impl Workspace {
         Ok(())
     }
 
-    pub fn active_path() -> Result<String> {
-        let active = std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default();
+    pub fn active_path(workspace_name: Option<&str>) -> Result<String> {
+        let active = match workspace_name {
+            None => std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default(),
+            Some(a) => a.to_string(),
+        };
         if active.is_empty() {
             bail!("No active workspace. Run: workspace use <name>");
         }
         Self::root_path(&active)
     }
 
-    pub fn active() -> Result<String> {
-        let active = std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default();
+    pub fn active(workspace_name: Option<&str>) -> Result<String> {
+        let active = match workspace_name {
+            None => std::env::var("SEMTOOLS_WORKSPACE").unwrap_or_default(),
+            Some(a) => a.to_string(),
+        };
         if active.is_empty() {
             bail!("No active workspace. Run: workspace use <name>");
         }
@@ -135,18 +141,30 @@ mod tests {
     }
 
     #[test]
-    fn test_workspace_set_and_get_active() {
+    fn test_workspace_set_and_get_active_from_env() {
         // Test setting active workspace
         unsafe {
             std::env::set_var("SEMTOOLS_WORKSPACE", "test-workspace");
         }
 
         // Test getting active workspace
-        let active = Workspace::active().expect("Failed to get active");
+        let active = Workspace::active(None).expect("Failed to get active");
         assert_eq!(active, "test-workspace");
 
         // Test getting active path
-        let active_path = Workspace::active_path().expect("Failed to get active path");
+        let active_path = Workspace::active_path(None).expect("Failed to get active path");
+        assert!(active_path.contains("test-workspace"));
+    }
+
+    #[test]
+    fn test_workspace_set_and_get_active_from_name() {
+        // Test getting active workspace
+        let active = Workspace::active(Some("test-workspace")).expect("Failed to get active");
+        assert_eq!(active, "test-workspace");
+
+        // Test getting active path
+        let active_path =
+            Workspace::active_path(Some("test-workspace")).expect("Failed to get active path");
         assert!(active_path.contains("test-workspace"));
     }
 
@@ -161,7 +179,7 @@ mod tests {
         }
 
         // Should fail when no active workspace
-        let result = Workspace::active();
+        let result = Workspace::active(None);
         assert!(result.is_err());
 
         // Clear environment variable
@@ -170,7 +188,7 @@ mod tests {
         }
 
         // Should fail when no active workspace
-        let result = Workspace::active_path();
+        let result = Workspace::active_path(None);
         assert!(result.is_err());
 
         // Restore original state
@@ -268,7 +286,7 @@ mod tests {
         }
 
         // Since we haven't saved a config file, open should use defaults
-        let workspace = Workspace::open().expect("Failed to open workspace");
+        let workspace = Workspace::open(None).expect("Failed to open workspace");
 
         assert_eq!(workspace.config.name, workspace_name);
         assert!(!workspace.config.root_dir.is_empty());
@@ -279,5 +297,16 @@ mod tests {
                 std::env::set_var("SEMTOOLS_WORKSPACE", value);
             }
         }
+    }
+
+    #[test]
+    fn test_workspace_open_with_workspace_name_and_defaults() {
+        let workspace_name = "test-defaults";
+
+        // Since we haven't saved a config file, open should use defaults
+        let workspace = Workspace::open(Some(workspace_name)).expect("Failed to open workspace");
+
+        assert_eq!(workspace.config.name, workspace_name);
+        assert!(!workspace.config.root_dir.is_empty());
     }
 }

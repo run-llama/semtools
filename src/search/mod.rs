@@ -148,9 +148,10 @@ pub async fn search_with_workspace(
     query: &str,
     model: &StaticModel,
     config: &SearchConfig,
+    workspace_name: Option<&str>,
 ) -> Result<Vec<RankedLine>> {
     let query_embedding = model.encode_single(query);
-    let ws = Workspace::open()?;
+    let ws = Workspace::open(workspace_name)?;
     let store = Store::open(&ws.config.root_dir)?;
 
     // Step 1: Analyze document states (changed/new/unchanged)

@@ -13,6 +13,7 @@ pub async fn call_tool(
     files: &[String],
     model: &StaticModel,
     cur_output: &mut AskOutput,
+    workspace_name: Option<&str>,
 ) -> Result<String> {
     let function_args: Value = serde_json::from_str(args)?;
 
@@ -96,7 +97,15 @@ pub async fn call_tool(
                 println!("    top_k: {}", top_k);
             }
 
-            SearchTool::search(files, query, model, config, &mut cur_output.files_searched).await
+            SearchTool::search(
+                files,
+                query,
+                model,
+                config,
+                &mut cur_output.files_searched,
+                workspace_name,
+            )
+            .await
         }
         "read" => {
             let path = function_args["path"]

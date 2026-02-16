@@ -27,6 +27,7 @@ pub async fn ask_cmd(
     model: Option<String>,
     api_mode: Option<String>,
     json: bool,
+    workspace_name: Option<&str>,
 ) -> Result<()> {
     // Load configuration
     let config_path = config.unwrap_or_else(SemtoolsConfig::default_config_path);
@@ -134,10 +135,28 @@ pub async fn ask_cmd(
     // Run the appropriate agent based on API mode
     let output = match api_mode {
         ApiMode::Chat => {
-            ask_agent(files, &query, &model, &client, &model_name, max_iterations).await?
+            ask_agent(
+                files,
+                &query,
+                &model,
+                &client,
+                &model_name,
+                max_iterations,
+                workspace_name,
+            )
+            .await?
         }
         ApiMode::Responses => {
-            ask_agent_responses(files, &query, &model, &client, &model_name, max_iterations).await?
+            ask_agent_responses(
+                files,
+                &query,
+                &model,
+                &client,
+                &model_name,
+                max_iterations,
+                workspace_name,
+            )
+            .await?
         }
     };
 

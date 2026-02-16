@@ -32,6 +32,7 @@ pub async fn ask_agent_responses(
     client: &Client<OpenAIConfig>,
     api_model: &str,
     max_iterations: Option<usize>,
+    workspace_name: Option<&str>,
 ) -> Result<AskOutput> {
     let max_iterations = max_iterations.unwrap_or(20);
     let mut result = AskOutput {
@@ -96,7 +97,8 @@ pub async fn ask_agent_responses(
                 let args = &function_call.arguments;
 
                 // Call the appropriate tool
-                let response_content = call_tool(name, args, &files, model, &mut result).await?;
+                let response_content =
+                    call_tool(name, args, &files, model, &mut result, workspace_name).await?;
 
                 // Print summary of the tool response
                 print_tool_summary(&response_content);

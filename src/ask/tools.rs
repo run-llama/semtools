@@ -211,6 +211,7 @@ impl SearchTool {
         model: &StaticModel,
         config: SearchConfig,
         files_searched: &mut Vec<String>,
+        workspace_name: Option<&str>,
     ) -> Result<String> {
         let query = if config.ignore_case {
             query.to_lowercase()
@@ -226,9 +227,10 @@ impl SearchTool {
 
         // Handle file input with optional workspace integration
         #[cfg(feature = "workspace")]
-        if Workspace::active().is_ok() {
+        if Workspace::active(workspace_name).is_ok() {
             // Workspace mode: use persisted line embeddings for speed
-            let ranked_lines = search_with_workspace(files, &query, model, &config).await?;
+            let ranked_lines =
+                search_with_workspace(files, &query, model, &config, workspace_name).await?;
 
             // Track files that were searched (have results)
             for ranked_line in &ranked_lines {

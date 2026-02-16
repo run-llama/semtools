@@ -15,9 +15,15 @@ enum WorkspaceCommands {
     /// Use or create a workspace (prints export command to run)
     Use { name: String },
     /// Show active workspace and basic stats
-    Status,
+    Status {
+        #[clap(default_value = None)]
+        name: Option<String>,
+    },
     /// Remove stale or missing files from store
-    Prune {},
+    Prune {
+        #[clap(default_value = None)]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -70,6 +76,10 @@ enum Commands {
         /// Output results in JSON format
         #[clap(short, long)]
         json: bool,
+
+        /// Use a specific workspace
+        #[arg(short, long, default_value = None)]
+        workspace: Option<String>,
     },
     #[cfg(feature = "ask")]
     /// A CLI tool for document-based question-answering
@@ -104,6 +114,10 @@ enum Commands {
         /// Output results in JSON or text format
         #[clap(short, long)]
         json: bool,
+
+        /// Use a specific workspace
+        #[arg(short, long, default_value = None)]
+        workspace: Option<String>,
     },
     #[cfg(feature = "workspace")]
     /// Manage semtools workspaces
@@ -130,9 +144,18 @@ async fn main() -> anyhow::Result<()> {
             model,
             api_mode,
             json,
+            workspace,
         } => {
             ask_cmd(
-                query, files, config, api_key, base_url, model, api_mode, json,
+                query,
+                files,
+                config,
+                api_key,
+                base_url,
+                model,
+                api_mode,
+                json,
+                workspace.as_deref(),
             )
             .await?;
         }
@@ -152,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
             max_distance,
             ignore_case,
             json,
+            workspace,
         } => {
             search_cmd(
                 query,
@@ -161,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
                 max_distance,
                 ignore_case,
                 json,
+                workspace.as_deref(),
             )
             .await?;
         }
@@ -168,11 +193,11 @@ async fn main() -> anyhow::Result<()> {
             WorkspaceCommands::Use { name } => {
                 workspace_use_cmd(name, json).await?;
             }
-            WorkspaceCommands::Prune {} => {
-                workspace_prune_cmd(json).await?;
+            WorkspaceCommands::Prune { name } => {
+                workspace_prune_cmd(json, name.as_deref()).await?;
             }
-            WorkspaceCommands::Status => {
-                workspace_status_cmd(json).await?;
+            WorkspaceCommands::Status { name } => {
+                workspace_status_cmd(json, name.as_deref()).await?;
             }
         },
     }
