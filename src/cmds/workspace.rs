@@ -46,6 +46,8 @@ pub async fn workspace_use_cmd(name: String, json: bool) -> Result<()> {
             println!("  export SEMTOOLS_WORKSPACE={name}");
             println!();
             println!("Or add this to your shell profile (.bashrc, .zshrc, etc.)");
+            println!();
+            println!("Or use the `--workspace` option on the commands that support it");
         }
     }
     #[cfg(not(feature = "workspace"))]
