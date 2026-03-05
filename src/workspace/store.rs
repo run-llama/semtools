@@ -2,6 +2,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::search::DocumentInfo;
+use ordered_float::OrderedFloat;
 use qdrant_edge::EdgeShard;
 use qdrant_edge::segment::data_types::vectors::NamedQuery;
 use qdrant_edge::segment::data_types::vectors::{VectorInternal, VectorStructInternal};
@@ -19,7 +20,6 @@ use qdrant_edge::shard::operations::point_ops::{
 use qdrant_edge::shard::query::query_enum::QueryEnum;
 use qdrant_edge::shard::query::{ScoringQuery, ShardQueryRequest};
 use qdrant_edge::shard::scroll::ScrollRequestInternal;
-use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
