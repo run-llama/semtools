@@ -2,25 +2,26 @@
 use anyhow::{Result, anyhow};
 
 use crate::search::DocumentInfo;
-use edge::EdgeShard;
-use ordered_float::OrderedFloat;
-use segment::data_types::vectors::{NamedQuery, VectorInternal, VectorStructInternal};
-use segment::json_path::JsonPath;
-use segment::types::{
+use qdrant_edge::EdgeShard;
+use qdrant_edge::segment::data_types::vectors::NamedQuery;
+use qdrant_edge::segment::data_types::vectors::{VectorInternal, VectorStructInternal};
+use qdrant_edge::segment::json_path::JsonPath;
+use qdrant_edge::segment::types::{
     AnyVariants, Condition, Distance, ExtendedPointId, FieldCondition, Filter, Match, Payload,
     PayloadStorageType, SegmentConfig, ValueVariants, VectorDataConfig, VectorStorageType,
     WithPayloadInterface, WithVector,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use shard::count::CountRequestInternal;
-use shard::operations::CollectionUpdateOperations;
-use shard::operations::point_ops::{
+use qdrant_edge::shard::count::CountRequestInternal;
+use qdrant_edge::shard::operations::CollectionUpdateOperations;
+use qdrant_edge::shard::operations::point_ops::{
     PointInsertOperationsInternal, PointOperations, PointStructPersisted,
 };
-use shard::query::query_enum::QueryEnum;
-use shard::query::{ScoringQuery, ShardQueryRequest};
-use shard::scroll::ScrollRequestInternal;
+use qdrant_edge::shard::query::query_enum::QueryEnum;
+use qdrant_edge::shard::query::{ScoringQuery, ShardQueryRequest};
+use qdrant_edge::shard::scroll::ScrollRequestInternal;
+use ordered_float::OrderedFloat;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
