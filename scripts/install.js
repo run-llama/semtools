@@ -34,38 +34,17 @@ function placeBinaries() {
   const isWindows = process.platform === 'win32';
   const exe = isWindows ? '.exe' : '';
 
-  const builtParse = join(__dirname, '..', 'target', 'release', `parse${exe}`);
-  const builtSearch = join(__dirname, '..', 'target', 'release', `search${exe}`);
-  const builtWorkspace = join(__dirname, '..', 'target', 'release', `workspace${exe}`);
+  const builtSemtools = join(__dirname, '..', 'target', 'release', `semtools${exe}`);
 
   const destDir = join(__dirname, '..', 'dist', 'bin');
   mkdirSync(destDir, { recursive: true });
 
-  let anyPlaced = false;
-
-  if (existsSync(builtParse)) {
-    const dest = join(destDir, `parse${exe}`);
-    copyFileSync(builtParse, dest);
+  if (existsSync(builtSemtools)) {
+    const dest = join(destDir, `semtools${exe}`);
+    copyFileSync(builtSemtools, dest);
     try { chmodSync(dest, 0o755); } catch {}
-    anyPlaced = true;
-  }
-
-  if (existsSync(builtSearch)) {
-    const dest = join(destDir, `search${exe}`);
-    copyFileSync(builtSearch, dest);
-    try { chmodSync(dest, 0o755); } catch {}
-    anyPlaced = true;
-  }
-
-  if (existsSync(builtWorkspace)) {
-    const dest = join(destDir, `workspace${exe}`);
-    copyFileSync(builtWorkspace, dest);
-    try { chmodSync(dest, 0o755); } catch {}
-    anyPlaced = true;
-  }
-
-  if (!anyPlaced) {
-    fail('No binaries were produced. Expected to find target/release/parse, target/release/search, and/or target/release/workspace.');
+  } else {
+    fail('No binary was produced. Expected to find target/release/semtools.');
   }
 }
 
@@ -151,10 +130,9 @@ async function tryDownloadPrebuilt() {
     } else {
       await tar.x({ file: archivePath, cwd: distBin });
     }
-    // Ensure executables
-    try { chmodSync(join(distBin, 'parse'), 0o755); } catch {}
-    try { chmodSync(join(distBin, 'search'), 0o755); } catch {}
-    try { chmodSync(join(distBin, 'workspace'), 0o755); } catch {}
+    // Ensure executable
+    const exe = process.platform === 'win32' ? '.exe' : '';
+    try { chmodSync(join(distBin, `semtools${exe}`), 0o755); } catch {}
     return true;
   } catch (e) {
     console.warn(`@llamaindex/semtools: failed to extract prebuilt: ${e.message}`);

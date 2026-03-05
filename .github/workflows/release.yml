@@ -91,9 +91,7 @@ jobs:
       if: runner.os != 'Windows'
       run: |
         mkdir -p release
-        cp target/${{ matrix.target }}/release/parse release/
-        cp target/${{ matrix.target }}/release/search release/
-        cp target/${{ matrix.target }}/release/workspace release/
+        cp target/${{ matrix.target }}/release/semtools release/
         cp README.md release/ 2>/dev/null || echo "README.md not found"
         cd release
         tar czf ../semtools-${{ matrix.target }}.tar.gz *
@@ -102,9 +100,7 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         mkdir release
-        copy target\${{ matrix.target }}\release\parse.exe release\
-        copy target\${{ matrix.target }}\release\search.exe release\
-        copy target\${{ matrix.target }}\release\workspace.exe release\
+        copy target\${{ matrix.target }}\release\semtools.exe release\
         copy README.md release\ 2>nul || echo "README.md not found"
         cd release
         7z a ..\semtools-${{ matrix.target }}.zip *
@@ -168,7 +164,7 @@ jobs:
 
     - name: Publish semtools crate
       run: |
-        echo "Publishing semtools crate (includes both parse and search binaries)..."
+        echo "Publishing semtools crate..."
         cargo publish --allow-dirty
 
     - name: Verify publication
