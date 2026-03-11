@@ -1,6 +1,6 @@
 {
   "name": "@llamaindex/semtools",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Semantic search and document parsing tools for the command line (Rust-backed, npm-distributed)",
   "license": "MIT",
   "author": "LlamaIndex",
