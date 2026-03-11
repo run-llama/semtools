@@ -9,7 +9,7 @@ const localPath = join(__dirname, '..', 'dist', 'bin', `semtools${exe}`);
 
 const bin = existsSync(localPath) ? localPath : `semtools${exe}`;
 
-const child = spawn(bin, ['search', ...process.argv.slice(2)], { stdio: 'inherit', shell: isWindows });
+const child = spawn(bin, process.argv.slice(2), { stdio: 'inherit', shell: isWindows });
 child.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   process.exit(code ?? 1);
