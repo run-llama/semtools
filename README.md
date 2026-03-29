@@ -1,5 +1,7 @@
 # SemTools
 
+[![gitcgr](https://gitcgr.com/badge/run-llama/semtools.svg)](https://gitcgr.com/run-llama/semtools)
+
 > Semantic search and document parsing tools for the command line
 
 A high-performance CLI tool for document processing and semantic search, built with Rust for speed and reliability.
