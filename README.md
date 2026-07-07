@@ -30,7 +30,14 @@ Prerequisites:
 
 Install:
 
-You can install `semtools` via npm:
+You can install `semtools` via Homebrew (macOS and Linux):
+
+```bash
+brew tap run-llama/semtools https://github.com/run-llama/semtools
+brew install semtools
+```
+
+Or via npm:
 
 ```bash
 npm i -g @llamaindex/semtools
