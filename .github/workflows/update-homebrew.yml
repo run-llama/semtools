@@ -1,0 +1,88 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-formula:
+    name: Update Formula SHA256 values
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: main
+
+    - name: Wait for release assets
+      run: sleep 30
+
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+    - name: Download release assets and compute checksums
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        cd /tmp
+
+        declare -A TARGETS=(
+          ["ARM64_DARWIN"]="semtools-aarch64-apple-darwin.tar.gz"
+          ["X86_64_DARWIN"]="semtools-x86_64-apple-darwin.tar.gz"
+          ["ARM64_LINUX"]="semtools-aarch64-unknown-linux-gnu.tar.gz"
+          ["X86_64_LINUX"]="semtools-x86_64-unknown-linux-gnu.tar.gz"
+        )
+
+        for KEY in "${!TARGETS[@]}"; do
+          ASSET="${TARGETS[$KEY]}"
+          URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${ASSET}"
+          echo "Downloading ${ASSET}..."
+          if curl -fsSL -o "${ASSET}" "${URL}"; then
+            SHA=$(sha256sum "${ASSET}" | cut -d' ' -f1)
+            echo "${KEY}_SHA=${SHA}" >> $GITHUB_ENV
+            echo "  ${KEY}: ${SHA}"
+          else
+            echo "  ${KEY}: asset not available, skipping"
+            echo "${KEY}_SHA=UNAVAILABLE" >> $GITHUB_ENV
+          fi
+        done
+
+    - name: Update formula
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        FORMULA="Formula/semtools.rb"
+
+        sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA"
+
+        if [ "$ARM64_DARWIN_SHA" != "UNAVAILABLE" ]; then
+          # Match the sha256 line after aarch64-apple-darwin url
+          sed -i "/aarch64-apple-darwin/{n;s/sha256 \".*\"/sha256 \"${ARM64_DARWIN_SHA}\"/}" "$FORMULA"
+        fi
+
+        if [ "$X86_64_DARWIN_SHA" != "UNAVAILABLE" ]; then
+          sed -i "/x86_64-apple-darwin/{n;s/sha256 \".*\"/sha256 \"${X86_64_DARWIN_SHA}\"/}" "$FORMULA"
+        fi
+
+        if [ "$ARM64_LINUX_SHA" != "UNAVAILABLE" ]; then
+          sed -i "/aarch64-unknown-linux-gnu/{n;s/sha256 \".*\"/sha256 \"${ARM64_LINUX_SHA}\"/}" "$FORMULA"
+        fi
+
+        if [ "$X86_64_LINUX_SHA" != "UNAVAILABLE" ]; then
+          sed -i "/x86_64-unknown-linux-gnu/{n;s/sha256 \".*\"/sha256 \"${X86_64_LINUX_SHA}\"/}" "$FORMULA"
+        fi
+
+        echo "Updated formula:"
+        cat "$FORMULA"
+
+    - name: Commit and push
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Formula/semtools.rb
+        git diff --cached --quiet && echo "No changes" && exit 0
+        git commit -m "Update Homebrew formula for v${{ steps.version.outputs.VERSION }}"
+        git push
