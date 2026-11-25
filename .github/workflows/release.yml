@@ -80,6 +80,7 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+        lookup-only: true
 
     - name: Install protoc
       uses: taiki-e/install-action@protoc
