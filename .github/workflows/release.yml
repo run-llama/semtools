@@ -126,6 +126,7 @@ jobs:
         omitName: true
 
   publish-crates:
+    environment: release
     name: Publish to crates.io
     needs: build-release
     runs-on: ubuntu-latest
@@ -173,6 +174,7 @@ jobs:
         echo "Users can now install with: cargo install semtools"
 
   publish-npm:
+    environment: release
     name: Publish to npm
     needs: build-release
     runs-on: ubuntu-latest
