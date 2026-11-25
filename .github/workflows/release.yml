@@ -193,6 +193,9 @@ jobs:
       with:
         node-version: '20'
         registry-url: 'https://registry.npmjs.org'
+        # No dependency cache in a publish job: setup-node v5+ caches by default, and a cache
+        # written by another workflow could poison what gets published (zizmor cache-poisoning).
+        package-manager-cache: false
 
     - name: Extract version from tag
       id: get_version
