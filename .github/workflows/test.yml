@@ -20,15 +20,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
       with:
         toolchain: ${{ matrix.rust }}
 
     - name: Cache cargo registry
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           ~/.cargo/registry
@@ -39,7 +39,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Install protoc
-      uses: taiki-e/install-action@protoc
+      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
 
     - name: Run tests
       run: cargo test --workspace
