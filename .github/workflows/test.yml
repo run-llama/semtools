@@ -39,7 +39,9 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Install protoc
-      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: protoc
 
     - name: Run tests
       run: cargo test --workspace

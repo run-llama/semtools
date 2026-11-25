@@ -83,7 +83,9 @@ jobs:
         lookup-only: true
 
     - name: Install protoc
-      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: protoc
 
     - name: Build release binaries
       run: cargo build --release --target ${{ matrix.target }}
@@ -140,7 +142,9 @@ jobs:
       uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
 
     - name: Install protoc
-      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: protoc
 
     - name: Extract version from tag
       id: get_version

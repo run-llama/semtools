@@ -32,7 +32,9 @@ jobs:
         key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install protoc
-      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: protoc
 
     - name: Run clippy
       run: cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -60,7 +62,9 @@ jobs:
       uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Install cargo-audit
-      uses: taiki-e/install-action@1c009442a2e6d2f0b3839e122123f418ae963a1e # cargo-audit
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: cargo-audit
 
     - name: Run security audit
       run: cargo audit
@@ -85,7 +89,9 @@ jobs:
         key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install protoc
-      uses: taiki-e/install-action@138f3cea2f18e281d8dd1ed1fec91a6596491992 # protoc
+      uses: taiki-e/install-action@18101caa61cb89118e2ee749786f33c6d1f8a8cb # v2.90.9
+      with:
+        tool: protoc
 
     - name: Check workspace
       run: cargo check --workspace --all-targets --all-features
